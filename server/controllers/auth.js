@@ -194,7 +194,16 @@ exports.resendOtp = async (req, res) => {
         if (!user) {
             return res.status(404).json({ success: false, error: 'User not found' });
         }
-        const { code } = await createOrUpdateOtp(user, 'login');
+        const code = generateOtp();
+        user.otp = code;
+        user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+        await user.save();
+        Promise.resolve()
+            .then(() => sendOTP(user.email, code))
+            .then((resSend) => {
+                if (!resSend?.success) console.error('[ResendOTP] OTP send failed', resSend?.error);
+            })
+            .catch((err) => console.error('[ResendOTP] OTP send error', err?.message || err));
         const payload = { success: true, message: 'OTP resent to your email' };
         if (process.env.NODE_ENV !== 'production') {
             payload.devOtp = code;
