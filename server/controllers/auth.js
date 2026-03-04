@@ -18,7 +18,21 @@ const generateEmailToken = (user) => {
     return jwt.sign({ id: user._id.toString(), email: user.email, type: 'verify' }, process.env.JWT_SECRET, { expiresIn: '24h' });
 };
 
-// Deprecated OtpCode flow retained for backward compatibility; using User fields for OTP
+// Regenerate and send OTP using User fields (resend support)
+const createOrUpdateOtp = async (user, purpose) => {
+    const code = generateOtp();
+    user.otp = code;
+    user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+    await user.save();
+    console.log('Sending OTP to:', user.email);
+    console.log('EMAIL_USER:', process.env.EMAIL_USER);
+    const otpSendRes = await sendOTP(user.email, code);
+    if (!otpSendRes.success) {
+        console.error('[ResendOTP] OTP send failed', otpSendRes.error);
+        throw new Error(otpSendRes.error || 'Failed to send OTP');
+    }
+    return { code };
+};
 
 // @desc    Register user
 // @route   POST /api/auth/register
