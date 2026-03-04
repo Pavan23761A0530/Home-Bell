@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 let nodemailer;
 try {
   nodemailer = require('nodemailer');
@@ -7,7 +8,7 @@ try {
 }
 
 let transporter = null;
-function initTransporterOnce() {
+function getTransporter() {
   if (!nodemailer) return null;
   if (transporter) return transporter;
   const emailUser = process.env.EMAIL_USER;
@@ -17,9 +18,16 @@ function initTransporterOnce() {
   if (emailUser && emailPass) {
     transporter = nodemailer.createTransport({
       service: 'gmail',
+      pool: true,
+      maxConnections: 2,
+      maxMessages: 40,
       auth: { user: emailUser, pass: emailPass }
     });
-    console.log('[EmailService] Transporter initialized: gmail');
+    transporter.verify().then(() => {
+      console.log('[EmailService] Transporter verified (gmail)');
+    }).catch(err => {
+      console.log('[EmailService] Transporter verify failed:', err?.message || err);
+    });
     return transporter;
   }
   if (smtpHost && smtpPort && process.env.SMTP_USER && process.env.SMTP_PASS) {
@@ -27,24 +35,30 @@ function initTransporterOnce() {
       host: smtpHost,
       port: smtpPort,
       secure: smtpPort === 465,
+      pool: true,
+      maxConnections: 2,
+      maxMessages: 40,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
     });
-    console.log('[EmailService] Transporter initialized: smtp', { host: smtpHost, port: smtpPort, secure: smtpPort === 465 });
+    transporter.verify().then(() => {
+      console.log('[EmailService] Transporter verified (smtp)');
+    }).catch(err => {
+      console.log('[EmailService] Transporter verify failed:', err?.message || err);
+    });
     return transporter;
   }
-  console.log('[EmailService] Transporter not configured. Missing EMAIL_USER/PASS or SMTP settings.');
   return null;
 }
-initTransporterOnce();
 
 async function sendEmail(to, subject, text, html) {
   try {
     const from = process.env.FROM_EMAIL || process.env.EMAIL_USER || 'no-reply@localserve';
-    if (!transporter) {
+    const t = getTransporter();
+    if (!t) {
       console.log('[EmailService] Transport not configured', { to, subject });
       return { success: false, error: 'Transport not configured' };
     }
-    const info = await transporter.sendMail({ from, to, subject, text, html });
+    const info = await t.sendMail({ from, to, subject, text, html });
     console.log('[EmailService] Sent', { messageId: info.messageId, to, subject });
     return { success: true, messageId: info.messageId };
   } catch (err) {

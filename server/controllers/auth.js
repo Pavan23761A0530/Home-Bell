@@ -18,31 +18,7 @@ const generateEmailToken = (user) => {
     return jwt.sign({ id: user._id.toString(), email: user.email, type: 'verify' }, process.env.JWT_SECRET, { expiresIn: '24h' });
 };
 
-// Regenerate and send OTP using User fields (resend support)
-const lastSentMap = new Map();
-const OTP_COOLDOWN_MS = 60 * 1000;
-const createOrUpdateOtp = async (user, purpose) => {
-    const code = generateOtp();
-    user.otp = code;
-    user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
-    await user.save();
-    const now = Date.now();
-    const last = lastSentMap.get(user._id.toString()) || 0;
-    if (now - last < OTP_COOLDOWN_MS) {
-        const waitSec = Math.ceil((OTP_COOLDOWN_MS - (now - last)) / 1000);
-        throw new Error(`Please wait ${waitSec}s before requesting a new OTP`);
-    }
-    lastSentMap.set(user._id.toString(), now);
-    console.log('Sending OTP to:', user.email);
-    console.log('EMAIL_USER:', process.env.EMAIL_USER);
-    // Fire-and-forget to avoid blocking response
-    sendOTP(user.email, code)
-        .then((res) => {
-            if (!res.success) console.error('[OTP] send failed:', res.error);
-        })
-        .catch((e) => console.error('[OTP] send error:', e?.message || e));
-    return { code };
-};
+// Deprecated OtpCode flow retained for backward compatibility; using User fields for OTP
 
 // @desc    Register user
 // @route   POST /api/auth/register
@@ -104,17 +80,22 @@ exports.register = async (req, res) => {
         const backendVerifyUrl = `${process.env.CLIENT_URL.replace(/\/$/, '')}/api/auth/verify-email?token=${encodeURIComponent(verifyToken)}&email=${encodeURIComponent(user.email)}`;
         const html = `<div>Welcome to LocalServe.<br/>Please verify your email by clicking <a href="${backendVerifyUrl}">this link</a>.<br/>This link expires in 24 hours.</div>`;
         const text = `Verify your email: ${backendVerifyUrl}`;
-        const emailResult = await sendEmail(user.email, 'Verify your LocalServe account', text, html);
-        if (!emailResult.success) {
-            console.log('[Register] Email send failed', emailResult.error);
-        }
+        // Fire-and-forget email sends to avoid request buffering
+        Promise.resolve()
+            .then(() => sendEmail(user.email, 'Verify your LocalServe account', text, html))
+            .then((res) => {
+                if (!res?.success) console.log('[Register] Email send failed', res?.error);
+            })
+            .catch((err) => console.log('[Register] Email send error', err?.message || err));
 
         console.log('Sending OTP to:', user.email);
         console.log('EMAIL_USER:', process.env.EMAIL_USER);
-        const otpSendRes = await sendOTP(user.email, otpCode);
-        if (!otpSendRes.success) {
-            console.error('[Register] OTP send failed', otpSendRes.error);
-        }
+        Promise.resolve()
+            .then(() => sendOTP(user.email, otpCode))
+            .then((res) => {
+                if (!res?.success) console.error('[Register] OTP send failed', res?.error);
+            })
+            .catch((err) => console.error('[Register] OTP send error', err?.message || err));
         const payload = {
             success: true,
             otpRequired: true,

@@ -1,9 +1,61 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 let nodemailer;
 try {
   nodemailer = require('nodemailer');
 } catch (e) {
   nodemailer = null;
+}
+
+let transporter = null;
+function getTransporter() {
+  if (!nodemailer) return null;
+  if (transporter) return transporter;
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS;
+  if (emailUser && emailPass) {
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      pool: true,
+      maxConnections: 3,
+      maxMessages: 50,
+      connectionTimeout: 10000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
+      auth: { user: emailUser, pass: emailPass }
+    });
+    transporter.verify().then(() => {
+      console.log('[sendOTP] Transporter verified (gmail)');
+    }).catch(err => {
+      console.error('[sendOTP] Transporter verify failed:', err?.message || err);
+    });
+    return transporter;
+  }
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || '0', 10);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (host && port && user && pass) {
+    transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      pool: true,
+      maxConnections: 3,
+      maxMessages: 50,
+      connectionTimeout: 10000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
+      auth: { user, pass }
+    });
+    transporter.verify().then(() => {
+      console.log('[sendOTP] Transporter verified (smtp)');
+    }).catch(err => {
+      console.error('[sendOTP] Transporter verify failed:', err?.message || err);
+    });
+    return transporter;
+  }
+  return null;
 }
 
 async function sendOTP(toEmail, otp) {
@@ -16,27 +68,35 @@ async function sendOTP(toEmail, otp) {
     }
     const emailUser = process.env.EMAIL_USER;
     const emailPass = process.env.EMAIL_PASS;
-    if (!emailUser || !emailPass) {
-      console.error('[sendOTP] Missing EMAIL_USER or EMAIL_PASS in environment');
-      throw new Error('Email credentials not configured');
+    const t = getTransporter();
+    if (!t) {
+      console.error('[sendOTP] Transporter not configured (missing EMAIL_USER/PASS or SMTP settings)');
+      throw new Error('Transporter not configured');
     }
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: emailUser, pass: emailPass }
-    });
     const subject = 'Your OTP Code';
     const text = `Your OTP code is ${otp}. It will expire in 5 minutes.`;
     const html = `<p>Your OTP code is <strong>${otp}</strong>.</p><p>It will expire in 5 minutes.</p>`;
     console.log('[sendOTP] Sending email to', toEmail);
-    const info = await transporter.sendMail({
-      from: process.env.FROM_EMAIL || emailUser,
+    const sendPromise = t.sendMail({
+      from: process.env.FROM_EMAIL || emailUser || process.env.SMTP_USER,
       to: toEmail,
       subject,
       text,
       html
     });
-    console.log('[sendOTP] Email sent. MessageId:', info.messageId);
-    return { success: true, messageId: info.messageId };
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 5000));
+    const result = await Promise.race([sendPromise, timeoutPromise]);
+    if (result && result.timeout) {
+      sendPromise.then((info) => {
+        console.log('[sendOTP] Email sent (delayed). MessageId:', info?.messageId);
+      }).catch((err) => {
+        console.error('[sendOTP] Email send failed (delayed):', err?.message || err);
+      });
+      console.log('[sendOTP] Email sending deferred to background');
+      return { success: true, deferred: true };
+    }
+    console.log('[sendOTP] Email sent. MessageId:', result.messageId);
+    return { success: true, messageId: result.messageId };
   } catch (err) {
     console.error('[sendOTP] Error sending email:', err?.message || err);
     return { success: false, error: err?.message || 'Unknown error' };
