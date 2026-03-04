@@ -19,18 +19,28 @@ const generateEmailToken = (user) => {
 };
 
 // Regenerate and send OTP using User fields (resend support)
+const lastSentMap = new Map();
+const OTP_COOLDOWN_MS = 60 * 1000;
 const createOrUpdateOtp = async (user, purpose) => {
     const code = generateOtp();
     user.otp = code;
     user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
     await user.save();
+    const now = Date.now();
+    const last = lastSentMap.get(user._id.toString()) || 0;
+    if (now - last < OTP_COOLDOWN_MS) {
+        const waitSec = Math.ceil((OTP_COOLDOWN_MS - (now - last)) / 1000);
+        throw new Error(`Please wait ${waitSec}s before requesting a new OTP`);
+    }
+    lastSentMap.set(user._id.toString(), now);
     console.log('Sending OTP to:', user.email);
     console.log('EMAIL_USER:', process.env.EMAIL_USER);
-    const otpSendRes = await sendOTP(user.email, code);
-    if (!otpSendRes.success) {
-        console.error('[ResendOTP] OTP send failed', otpSendRes.error);
-        throw new Error(otpSendRes.error || 'Failed to send OTP');
-    }
+    // Fire-and-forget to avoid blocking response
+    sendOTP(user.email, code)
+        .then((res) => {
+            if (!res.success) console.error('[OTP] send failed:', res.error);
+        })
+        .catch((e) => console.error('[OTP] send error:', e?.message || e));
     return { code };
 };
 
