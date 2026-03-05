@@ -70,6 +70,7 @@ exports.register = async (req, res) => {
             });
         }
 
+        console.log('[Register] Incoming email from body:', email);
         const otpCode = generateOtp();
         user.isVerified = false;
         user.otp = otpCode;
@@ -88,8 +89,7 @@ exports.register = async (req, res) => {
             })
             .catch((err) => console.log('[Register] Email send error', err?.message || err));
 
-        console.log('Sending OTP to:', user.email);
-        console.log('EMAIL_USER:', process.env.EMAIL_USER);
+        console.log('[Register] Sending OTP to user email:', user.email, 'SMTP sender:', process.env.EMAIL_USER);
         Promise.resolve()
             .then(() => sendOTP(user.email, otpCode))
             .then((res) => {
@@ -190,10 +190,12 @@ exports.resendOtp = async (req, res) => {
         return res.status(400).json({ success: false, error: 'Email is required' });
     }
     try {
+        console.log('[ResendOTP] Email from request body:', email);
         const user = await User.findOne({ email });
         if (!user) {
             return res.status(404).json({ success: false, error: 'User not found' });
         }
+        console.log('[ResendOTP] Resolved user email for resend:', user.email);
         const code = generateOtp();
         user.otp = code;
         user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);

@@ -58,10 +58,19 @@ function getTransporter() {
   return null;
 }
 
+function isValidEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 async function sendOTP(toEmail, otp) {
   try {
     console.log('[sendOTP] Email function triggered');
-    console.log('[sendOTP] EMAIL_USER =', process.env.EMAIL_USER);
+    console.log('[sendOTP] EMAIL_USER (sender) =', process.env.EMAIL_USER);
+    console.log('[sendOTP] Intended recipient (to) =', toEmail);
+    if (!toEmail || !isValidEmail(toEmail)) {
+      console.error('[sendOTP] Invalid or missing recipient email');
+      throw new Error('Invalid recipient email');
+    }
     const sendTimeoutMs = parseInt(process.env.EMAIL_SEND_TIMEOUT_MS || (process.env.NODE_ENV === 'production' ? '15000' : '5000'), 10);
     if (!nodemailer) {
       console.error('[sendOTP] nodemailer not installed');
@@ -77,9 +86,10 @@ async function sendOTP(toEmail, otp) {
     const subject = 'Your OTP Code';
     const text = `Your OTP code is ${otp}. It will expire in 5 minutes.`;
     const html = `<p>Your OTP code is <strong>${otp}</strong>.</p><p>It will expire in 5 minutes.</p>`;
-    console.log('[sendOTP] Sending email to', toEmail);
+    const fromAddress = process.env.FROM_EMAIL || emailUser || process.env.SMTP_USER;
+    console.log('[sendOTP] Sending email FROM', fromAddress, 'TO', toEmail);
     const sendPromise = t.sendMail({
-      from: process.env.FROM_EMAIL || emailUser || process.env.SMTP_USER,
+      from: fromAddress,
       to: toEmail,
       subject,
       text,

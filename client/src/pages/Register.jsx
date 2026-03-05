@@ -34,6 +34,7 @@ const Register = () => {
         setError('');
         setLoading(true);
         const toastId = toast.loading('Creating your account...');
+        console.log('[Register] Submitting signup for email:', formData.email);
 
         try {
             const payload = {
@@ -42,6 +43,7 @@ const Register = () => {
                 password: formData.password,
                 role: formData.role
             };
+            console.log('[Register] Payload email to backend:', payload.email);
             const result = await register(payload);
             if (result?.otpRequired) {
                 toast.success('OTP sent to your email. Verify to continue.', { id: toastId });

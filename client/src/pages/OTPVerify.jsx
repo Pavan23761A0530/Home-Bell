@@ -62,6 +62,7 @@ const OTPVerify = () => {
   const handleResend = async () => {
     if (cooldown > 0 || !email) return;
     const toastId = toast.loading('Resending OTP...');
+    console.log('[OTPVerify] Resend requested for email:', email);
     try {
       const res = await api.post('/auth/resend-otp', { email });
       if (res.data.success) {
