@@ -62,6 +62,7 @@ async function sendOTP(toEmail, otp) {
   try {
     console.log('[sendOTP] Email function triggered');
     console.log('[sendOTP] EMAIL_USER =', process.env.EMAIL_USER);
+    const sendTimeoutMs = parseInt(process.env.EMAIL_SEND_TIMEOUT_MS || (process.env.NODE_ENV === 'production' ? '15000' : '5000'), 10);
     if (!nodemailer) {
       console.error('[sendOTP] nodemailer not installed');
       throw new Error('Email library not available');
@@ -84,16 +85,21 @@ async function sendOTP(toEmail, otp) {
       text,
       html
     });
-    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 5000));
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), sendTimeoutMs));
     const result = await Promise.race([sendPromise, timeoutPromise]);
     if (result && result.timeout) {
-      sendPromise.then((info) => {
-        console.log('[sendOTP] Email sent (delayed). MessageId:', info?.messageId);
-      }).catch((err) => {
-        console.error('[sendOTP] Email send failed (delayed):', err?.message || err);
-      });
-      console.log('[sendOTP] Email sending deferred to background');
-      return { success: true, deferred: true };
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[sendOTP] Email send timed out in production');
+        return { success: false, error: 'Email send timeout' };
+      } else {
+        sendPromise.then((info) => {
+          console.log('[sendOTP] Email sent (delayed). MessageId:', info?.messageId);
+        }).catch((err) => {
+          console.error('[sendOTP] Email send failed (delayed):', err?.message || err);
+        });
+        console.log('[sendOTP] Email sending deferred to background');
+        return { success: true, deferred: true };
+      }
     }
     console.log('[sendOTP] Email sent. MessageId:', result.messageId);
     return { success: true, messageId: result.messageId };
