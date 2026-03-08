@@ -14,6 +14,9 @@ const jwt = require('jsonwebtoken');  // Added missing jwt import
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 console.log('Groq key loaded:', !!process.env.GROQ_API_KEY);
 
+const { initEmailTransporter } = require('./services/sendOTP');
+initEmailTransporter();
+
 // Connect to database
 connectDB().catch(() => {
     console.error('Database connection failed');

@@ -68,6 +68,25 @@ function isValidEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function initEmailTransporter() {
+  try {
+    const t = getTransporter();
+    if (!t) {
+      console.error('[sendOTP] Email transporter not configured at startup');
+      return false;
+    }
+    t.verify().then(() => {
+      console.log('[sendOTP] Startup verify OK');
+    }).catch(err => {
+      console.error('[sendOTP] Startup verify failed:', err?.message || err);
+    });
+    return true;
+  } catch (e) {
+    console.error('[sendOTP] Startup init error:', e?.message || e);
+    return false;
+  }
+}
+
 async function sendOTP(toEmail, otp) {
   try {
     console.log('[sendOTP] Email function triggered');
@@ -102,35 +121,38 @@ async function sendOTP(toEmail, otp) {
     const html = `<p>Your OTP code is <strong>${otp}</strong>.</p><p>It will expire in 5 minutes.</p>`;
     const fromAddress = process.env.FROM_EMAIL || emailUser || process.env.SMTP_USER;
     console.log('[sendOTP] Sending email FROM', fromAddress, 'TO', toEmail);
-    const sendPromise = t.sendMail({
-      from: fromAddress,
-      to: toEmail,
-      subject,
-      text,
-      html
-    });
-    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), sendTimeoutMs));
-    const result = await Promise.race([sendPromise, timeoutPromise]);
-    if (result && result.timeout) {
-      if (process.env.NODE_ENV === 'production') {
-        console.error('[sendOTP] Email send timed out in production');
-        return { success: false, error: 'Email send timeout' };
-      } else {
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const info = await t.sendMail({ from: fromAddress, to: toEmail, subject, text, html });
+        console.log('[sendOTP] Email sent. MessageId:', info?.messageId, 'Response:', info?.response);
+        return { success: true, messageId: info?.messageId, response: info?.response };
+      } catch (errSend) {
+        console.error('[sendOTP] sendMail failed:', errSend?.message || errSend);
+        if (errSend?.stack) console.error(errSend.stack);
+        return { success: false, error: errSend?.message || 'sendMail failed' };
+      }
+    } else {
+      const sendPromise = t.sendMail({ from: fromAddress, to: toEmail, subject, text, html });
+      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), sendTimeoutMs));
+      const result = await Promise.race([sendPromise, timeoutPromise]);
+      if (result && result.timeout) {
         sendPromise.then((info) => {
-          console.log('[sendOTP] Email sent (delayed). MessageId:', info?.messageId);
+          console.log('[sendOTP] Email sent (delayed). MessageId:', info?.messageId, 'Response:', info?.response);
         }).catch((err) => {
           console.error('[sendOTP] Email send failed (delayed):', err?.message || err);
+          if (err?.stack) console.error(err.stack);
         });
         console.log('[sendOTP] Email sending deferred to background');
         return { success: true, deferred: true };
       }
+      console.log('[sendOTP] Email sent. MessageId:', result.messageId, 'Response:', result?.response);
+      return { success: true, messageId: result.messageId, response: result?.response };
     }
-    console.log('[sendOTP] Email sent. MessageId:', result.messageId);
-    return { success: true, messageId: result.messageId };
   } catch (err) {
     console.error('[sendOTP] Error sending email:', err?.message || err);
+    if (err?.stack) console.error(err.stack);
     return { success: false, error: err?.message || 'Unknown error' };
   }
 }
 
-module.exports = { sendOTP };
+module.exports = { sendOTP, initEmailTransporter };
