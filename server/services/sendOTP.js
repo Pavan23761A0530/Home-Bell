@@ -36,10 +36,11 @@ function getTransporter() {
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
   if (host && port && user && pass) {
-    transporter = nodemailer.createTransport({
+    const secure = port === 465;
+    const cfg = {
       host,
       port,
-      secure: port === 465,
+      secure,
       pool: true,
       maxConnections: 3,
       maxMessages: 50,
@@ -47,7 +48,12 @@ function getTransporter() {
       greetingTimeout: 5000,
       socketTimeout: 10000,
       auth: { user, pass }
-    });
+    };
+    if (!secure) {
+      cfg.tls = { rejectUnauthorized: false };
+    }
+    transporter = nodemailer.createTransport(cfg);
+    console.log('[sendOTP] SMTP transporter created', { host, port, secure, tlsNoReject: !secure });
     transporter.verify().then(() => {
       console.log('[sendOTP] Transporter verified (smtp)');
     }).catch(err => {
@@ -67,9 +73,17 @@ async function sendOTP(toEmail, otp) {
     console.log('[sendOTP] Email function triggered');
     console.log('[sendOTP] EMAIL_USER (sender) =', process.env.EMAIL_USER);
     console.log('[sendOTP] Intended recipient (to) =', toEmail);
+    if (process.env.NODE_ENV === 'production') {
+      if (!process.env.EMAIL_USER && !(process.env.SMTP_HOST && process.env.SMTP_USER)) {
+        console.error('[sendOTP] Missing production email credentials (EMAIL_USER/EMAIL_PASS or SMTP_*).');
+      }
+    }
     if (!toEmail || !isValidEmail(toEmail)) {
       console.error('[sendOTP] Invalid or missing recipient email');
       throw new Error('Invalid recipient email');
+    }
+    if (process.env.EMAIL_USER && toEmail === process.env.EMAIL_USER) {
+      console.warn('[sendOTP] Warning: recipient equals SMTP sender; check frontend input.');
     }
     const sendTimeoutMs = parseInt(process.env.EMAIL_SEND_TIMEOUT_MS || (process.env.NODE_ENV === 'production' ? '15000' : '5000'), 10);
     if (!nodemailer) {
