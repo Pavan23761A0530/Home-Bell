@@ -11,6 +11,30 @@ let transporter = null;
 function getTransporter() {
   if (!nodemailer) return null;
   if (transporter) return transporter;
+  const sendgridKey = process.env.SENDGRID_API_KEY;
+  if (sendgridKey) {
+    const cfg = {
+      host: 'smtp.sendgrid.net',
+      port: 587,
+      secure: false,
+      pool: true,
+      maxConnections: 3,
+      maxMessages: 50,
+      connectionTimeout: 10000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
+      auth: { user: 'apikey', pass: sendgridKey },
+      tls: { rejectUnauthorized: false }
+    };
+    transporter = nodemailer.createTransport(cfg);
+    console.log('[sendOTP] SendGrid SMTP transporter created (port 587, secure=false)');
+    transporter.verify().then(() => {
+      console.log('[sendOTP] Transporter verified (sendgrid smtp)');
+    }).catch(err => {
+      console.error('[sendOTP] Transporter verify failed (sendgrid):', err?.message || err);
+    });
+    return transporter;
+  }
   const emailUser = process.env.EMAIL_USER;
   const emailPass = process.env.EMAIL_PASS;
   if (emailUser && emailPass) {
