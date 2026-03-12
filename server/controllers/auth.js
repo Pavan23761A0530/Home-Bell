@@ -90,19 +90,16 @@ exports.register = async (req, res) => {
             .catch((err) => console.log('[Register] Email send error', err?.message || err));
 
         console.log('[Register] Sending OTP to user email:', user.email, 'SMTP sender:', process.env.EMAIL_USER);
-        if (process.env.NODE_ENV === 'production') {
-            const sendResult = await sendOTP(user.email, otpCode);
-            if (!sendResult?.success) {
-                console.error('[Register] OTP send failed (production):', sendResult?.error);
-                return res.status(500).json({ success: false, error: 'Failed to send OTP email. Please try again later.' });
+        try {
+            const resOtp = await sendOTP(user.email, otpCode);
+            if (!resOtp?.success) {
+                console.error('[Register] OTP send failed', resOtp?.error);
+                // Return 500 in both dev and prod if OTP fails, to be safe
+                return res.status(500).json({ success: false, error: 'Failed to send OTP email. ' + (resOtp?.error || 'Unknown error') });
             }
-        } else {
-            Promise.resolve()
-                .then(() => sendOTP(user.email, otpCode))
-                .then((res) => {
-                    if (!res?.success) console.error('[Register] OTP send failed', res?.error);
-                })
-                .catch((err) => console.error('[Register] OTP send error', err?.message || err));
+        } catch (err) {
+            console.error('[Register] OTP send error', err?.message || err);
+            return res.status(500).json({ success: false, error: 'Failed to send OTP email. ' + err.message });
         }
         const payload = {
             success: true,
