@@ -12,30 +12,6 @@ function getTransporter() {
   if (!nodemailer) return null;
   if (transporter) return transporter;
 
-  const sendgridKey = process.env.SENDGRID_API_KEY;
-  if (sendgridKey) {
-    const cfg = {
-      host: 'smtp.sendgrid.net',
-      port: 587,
-      secure: false,
-      pool: true,
-      maxConnections: 3,
-      maxMessages: 50,
-      connectionTimeout: 15000,
-      auth: { user: 'apikey', pass: sendgridKey },
-      tls: { rejectUnauthorized: false }
-    };
-    transporter = nodemailer.createTransport(cfg);
-    const maskedKey = sendgridKey.length > 8 ? sendgridKey.substring(0, 4) + '...' + sendgridKey.substring(sendgridKey.length - 4) : '***';
-    console.log('[EmailService] SendGrid SMTP transporter created. API Key:', maskedKey);
-    transporter.verify().then(() => {
-      console.log('[EmailService] Transporter verified (sendgrid)');
-    }).catch(err => {
-      console.error('[EmailService] Transporter verify failed (sendgrid):', err?.message || err);
-    });
-    return transporter;
-  }
-
   const emailUser = process.env.EMAIL_USER;
   const emailPass = process.env.EMAIL_PASS;
   const smtpHost = process.env.SMTP_HOST;
@@ -46,6 +22,7 @@ function getTransporter() {
       pool: true,
       maxConnections: 2,
       maxMessages: 40,
+      connectionTimeout: 15000,
       auth: { user: emailUser, pass: emailPass }
     });
     transporter.verify().then(() => {
@@ -56,15 +33,21 @@ function getTransporter() {
     return transporter;
   }
   if (smtpHost && smtpPort && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    transporter = nodemailer.createTransport({
+    const secure = smtpPort === 465;
+    const cfg = {
       host: smtpHost,
       port: smtpPort,
-      secure: smtpPort === 465,
+      secure,
       pool: true,
       maxConnections: 2,
       maxMessages: 40,
+      connectionTimeout: 15000,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-    });
+    };
+    if (!secure) {
+      cfg.tls = { rejectUnauthorized: false };
+    }
+    transporter = nodemailer.createTransport(cfg);
     transporter.verify().then(() => {
       console.log('[EmailService] Transporter verified (smtp)');
     }).catch(err => {

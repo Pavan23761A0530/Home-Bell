@@ -11,34 +11,7 @@ let transporter = null;
 function getTransporter() {
   if (!nodemailer) return null;
   if (transporter) return transporter;
-  const sendgridKey = process.env.SENDGRID_API_KEY;
-  if (sendgridKey) {
-    const cfg = {
-      host: 'smtp.sendgrid.net',
-      port: 587,
-      secure: false,
-      pool: true,
-      maxConnections: 3,
-      maxMessages: 50,
-      connectionTimeout: 15000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-      auth: { user: 'apikey', pass: sendgridKey },
-      tls: { rejectUnauthorized: false }
-    };
-    transporter = nodemailer.createTransport(cfg);
-    const maskedKey = sendgridKey.length > 8 ? sendgridKey.substring(0, 4) + '...' + sendgridKey.substring(sendgridKey.length - 4) : '***';
-    console.log('[sendOTP] SendGrid SMTP transporter created (port 587, secure=false). API Key:', maskedKey);
-    transporter.verify().then(() => {
-      console.log('[sendOTP] Transporter verified (sendgrid smtp)');
-    }).catch(err => {
-      console.error('[sendOTP] Transporter verify failed (sendgrid):', err?.message || err);
-      if (err?.message?.includes('535')) {
-        console.error('[sendOTP] SendGrid 535 Error: Check if your API Key is valid and has "Mail Send" permissions. Also ensure the FROM address is a verified sender in SendGrid.');
-      }
-    });
-    return transporter;
-  }
+
   const emailUser = process.env.EMAIL_USER;
   const emailPass = process.env.EMAIL_PASS;
   if (emailUser && emailPass) {
@@ -47,9 +20,9 @@ function getTransporter() {
       pool: true,
       maxConnections: 3,
       maxMessages: 50,
-      connectionTimeout: 10000,
-      greetingTimeout: 5000,
-      socketTimeout: 10000,
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       auth: { user: emailUser, pass: emailPass }
     });
     transporter.verify().then(() => {
@@ -72,9 +45,9 @@ function getTransporter() {
       pool: true,
       maxConnections: 3,
       maxMessages: 50,
-      connectionTimeout: 10000,
-      greetingTimeout: 5000,
-      socketTimeout: 10000,
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       auth: { user, pass }
     };
     if (!secure) {
@@ -118,7 +91,6 @@ function initEmailTransporter() {
 async function getTransporterInfo() {
   const t = getTransporter();
   const info = {
-    hasSendGridKey: !!process.env.SENDGRID_API_KEY,
     hasEmailUser: !!process.env.EMAIL_USER,
     hasSmtpHost: !!process.env.SMTP_HOST,
     fromAddress: process.env.FROM_EMAIL || process.env.EMAIL_USER || process.env.SMTP_USER,
@@ -133,7 +105,7 @@ async function getTransporterInfo() {
   info.host = opts.host || null;
   info.port = opts.port || null;
   info.secure = !!opts.secure;
-  info.type = opts.service ? 'gmail' : (opts.host === 'smtp.sendgrid.net' ? 'sendgrid' : 'smtp');
+  info.type = opts.service ? 'gmail' : 'smtp';
   try {
     await t.verify();
     info.verified = true;
