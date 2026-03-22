@@ -28,22 +28,22 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Enable CORS with credentials support
+const allowedOrigins = [
+    process.env.CLIENT_URL,
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174"
+].filter(Boolean);
+
 app.use(cors({
     origin: function (origin, callback) {
         // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
         
-        // Check against environment variable and default dev origins
-        const allowedOrigins = [
-            process.env.CLIENT_URL,
-            "http://localhost:5173",
-            "http://localhost:5174",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:5174"
-        ];
-        
         if (
             allowedOrigins.includes(origin) ||
+            process.env.NODE_ENV === 'production' || // More permissive in production to avoid Render URL issues
             (process.env.NODE_ENV === 'development' && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin))
         ) {
             return callback(null, true);
@@ -85,13 +85,27 @@ app.use('/api/ai', require('./routes/ai'));
 app.use('/api/admin/auth', require('./routes/adminAuth'));
 app.use('/api/admin', admin);
 
+// Serve static assets in production (Render/Heroku)
+if (process.env.NODE_ENV === 'production') {
+    // Set static folder
+    app.use(express.static(path.join(__dirname, '../client/dist')));
+
+    app.get('*', (req, res) => {
+        // Don't serve API routes as HTML
+        if (req.path.startsWith('/api')) {
+            return res.status(404).json({ success: false, message: 'API route not found' });
+        }
+        res.sendFile(path.resolve(__dirname, '../client', 'dist', 'index.html'));
+    });
+}
+
 const PORT = process.env.PORT || 5000;
 
 // Create HTTP server and Socket.IO instance
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.CLIENT_URL || "http://localhost:3000",
+        origin: process.env.NODE_ENV === 'production' ? true : (process.env.CLIENT_URL || "http://localhost:3000"),
         methods: ["GET", "POST"]
     }
 });
