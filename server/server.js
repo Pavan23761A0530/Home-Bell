@@ -41,14 +41,20 @@ app.use(cors({
         // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
         
+        // Trim trailing slashes for safe comparison
+        const cleanOrigin = origin.replace(/\/$/, "");
+        const allowedCleanOrigins = allowedOrigins.map(url => url ? url.replace(/\/$/, "") : url);
+        
         if (
-            allowedOrigins.includes(origin) ||
-            process.env.NODE_ENV === 'production' || // More permissive in production to avoid Render URL issues
+            allowedCleanOrigins.includes(cleanOrigin) ||
+            process.env.NODE_ENV === 'production' || 
+            cleanOrigin.endsWith('.onrender.com') || // Explicitly allow Render frontends
             (process.env.NODE_ENV === 'development' && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin))
         ) {
             return callback(null, true);
         }
         
+        console.error(`[CORS Blocked] Origin missing from whitelist: ${origin}`);
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
