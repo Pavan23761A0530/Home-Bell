@@ -206,10 +206,26 @@ exports.resendOtp = async (req, res) => {
         if (!user) {
             return res.status(404).json({ success: false, error: 'User not found' });
         }
-        const { code } = await createOrUpdateOtp(user, 'login');
+        
+        // Anti-spam cooldown check (e.g. 1 minute)
+        if (user.otpExpiry && (user.otpExpiry.getTime() - Date.now() > 4 * 60 * 1000)) {
+            return res.status(400).json({ success: false, error: 'Please wait a moment before requesting a new OTP' });
+        }
+
+        const otpCode = generateOtp();
+        user.otp = otpCode;
+        user.otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+        await user.save();
+
+        const otpSendRes = await sendOTP(user.email, otpCode);
+        if (!otpSendRes.success) {
+            console.error('[resendOtp] OTP send failed', otpSendRes.error);
+            return res.status(500).json({ success: false, error: 'Failed to send OTP via email. Try again later.' });
+        }
+
         const payload = { success: true, message: 'OTP resent to your email' };
         if (process.env.NODE_ENV !== 'production') {
-            payload.devOtp = code;
+            payload.devOtp = otpCode;
         }
         return res.status(200).json(payload);
     } catch (err) {

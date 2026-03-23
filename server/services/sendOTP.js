@@ -1,45 +1,48 @@
 require('dotenv').config();
-let nodemailer;
-try {
-  nodemailer = require('nodemailer');
-} catch (e) {
-  nodemailer = null;
-}
+const axios = require('axios');
 
 async function sendOTP(toEmail, otp) {
   try {
-    console.log('[sendOTP] Email function triggered');
-    console.log('[sendOTP] EMAIL_USER =', process.env.EMAIL_USER);
-    if (!nodemailer) {
-      console.error('[sendOTP] nodemailer not installed');
-      throw new Error('Email library not available');
+    console.log('[sendOTP] Brevo Email function triggered');
+    
+    const apiKey = process.env.BREVO_API_KEY;
+    const senderEmail = process.env.BREVO_SENDER_EMAIL;
+
+    if (!apiKey || !senderEmail) {
+      console.error('[sendOTP] Missing BREVO_API_KEY or BREVO_SENDER_EMAIL in environment');
+      throw new Error('Brevo credentials not configured');
     }
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
-    if (!emailUser || !emailPass) {
-      console.error('[sendOTP] Missing EMAIL_USER or EMAIL_PASS in environment');
-      throw new Error('Email credentials not configured');
-    }
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: emailUser, pass: emailPass }
+
+    const payload = {
+      sender: {
+        name: 'Home Bell',
+        email: senderEmail
+      },
+      to: [
+        {
+          email: toEmail
+        }
+      ],
+      subject: 'Your OTP Code',
+      htmlContent: `<p>Your OTP code is <strong>${otp}</strong>.</p><p>It will expire in 5 minutes.</p>`,
+      textContent: `Your OTP code is ${otp}. It will expire in 5 minutes.`
+    };
+
+    console.log('[sendOTP] Sending email via Brevo to', toEmail);
+    
+    const response = await axios.post('https://api.brevo.com/v3/smtp/email', payload, {
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json'
+      }
     });
-    const subject = 'Your OTP Code';
-    const text = `Your OTP code is ${otp}. It will expire in 5 minutes.`;
-    const html = `<p>Your OTP code is <strong>${otp}</strong>.</p><p>It will expire in 5 minutes.</p>`;
-    console.log('[sendOTP] Sending email to', toEmail);
-    const info = await transporter.sendMail({
-      from: process.env.FROM_EMAIL || emailUser,
-      to: toEmail,
-      subject,
-      text,
-      html
-    });
-    console.log('[sendOTP] Email sent. MessageId:', info.messageId);
-    return { success: true, messageId: info.messageId };
+
+    console.log('[sendOTP] Email sent. MessageId:', response.data.messageId);
+    return { success: true, messageId: response.data.messageId };
   } catch (err) {
-    console.error('[sendOTP] Error sending email:', err?.message || err);
-    return { success: false, error: err?.message || 'Unknown error' };
+    console.error('[sendOTP] Error sending email:', err?.response?.data || err?.message || err);
+    return { success: false, error: err?.response?.data?.message || err?.message || 'Unknown error' };
   }
 }
 
