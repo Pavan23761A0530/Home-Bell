@@ -93,36 +93,21 @@ app.use('/api/admin', admin);
 
 // Serve static assets in production (Render/Heroku)
 if (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') {
-    // Use absolute path for build directory
-    const buildPath = path.join(__dirname, '..', 'client', 'dist');
-    const indexPath = path.join(buildPath, 'index.html');
-    
-    // Log build path for debugging
-    console.log('Attempting to serve static files from:', buildPath);
-    
-    // Static file middleware
-    app.use(express.static(buildPath));
+    // Correct Express static serving
+    app.use(express.static(path.join(__dirname, "../client/dist")));
 
-    // Wildcard route for React SPA
-    app.get('*', (req, res) => {
+    // Add catch-all route for SPA
+    app.get("*", (req, res) => {
         // Skip API routes
         if (req.path.startsWith('/api')) {
-            return res.status(404).json({ success: false, message: 'API endpoint not found' });
+            return res.status(404).json({ success: false, message: 'API route not found' });
         }
-        
-        // Serve index.html if it exists
-        const fs = require('fs');
-        if (fs.existsSync(indexPath)) {
-            res.sendFile(indexPath);
-        } else {
-            console.error('Critical Error: index.html not found at', indexPath);
-            res.status(500).send('Application build error: Frontend not found. Please run build script.');
-        }
+        res.sendFile(path.join(__dirname, "../client/dist/index.html"));
     });
 } else {
     // Development fallback
     app.get('/', (req, res) => {
-        res.status(200).json({ success: true, message: 'Home Bell API is running in development mode' });
+        res.status(200).json({ success: true, message: 'Home Bell API is running' });
     });
 }
 
