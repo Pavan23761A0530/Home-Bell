@@ -93,28 +93,37 @@ app.use('/api/admin', admin);
 
 // Serve static assets in production (Render/Heroku)
 if (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') {
-    // Set static folder
-    const buildPath = path.resolve(__dirname, '../client/dist');
+    // Use absolute path for build directory
+    const buildPath = path.join(__dirname, '..', 'client', 'dist');
+    const indexPath = path.join(buildPath, 'index.html');
     
-    // Check if the build folder exists before trying to serve it
-    const fs = require('fs');
-    if (fs.existsSync(buildPath)) {
-        app.use(express.static(buildPath));
+    // Log build path for debugging
+    console.log('Attempting to serve static files from:', buildPath);
+    
+    // Static file middleware
+    app.use(express.static(buildPath));
 
-        app.get('*', (req, res) => {
-            // Don't serve API routes as HTML
-            if (req.path.startsWith('/api')) {
-                return res.status(404).json({ success: false, message: 'API route not found' });
-            }
-            res.sendFile(path.resolve(buildPath, 'index.html'));
-        });
-    } else {
-        console.log('Build folder not found at:', buildPath);
-        // Fallback for direct backend deployment
-        app.get('/', (req, res) => {
-            res.status(200).json({ success: true, message: 'API is running' });
-        });
-    }
+    // Wildcard route for React SPA
+    app.get('*', (req, res) => {
+        // Skip API routes
+        if (req.path.startsWith('/api')) {
+            return res.status(404).json({ success: false, message: 'API endpoint not found' });
+        }
+        
+        // Serve index.html if it exists
+        const fs = require('fs');
+        if (fs.existsSync(indexPath)) {
+            res.sendFile(indexPath);
+        } else {
+            console.error('Critical Error: index.html not found at', indexPath);
+            res.status(500).send('Application build error: Frontend not found. Please run build script.');
+        }
+    });
+} else {
+    // Development fallback
+    app.get('/', (req, res) => {
+        res.status(200).json({ success: true, message: 'Home Bell API is running in development mode' });
+    });
 }
 
 const PORT = process.env.PORT || 5000;
