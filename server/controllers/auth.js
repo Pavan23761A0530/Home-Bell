@@ -90,7 +90,14 @@ exports.register = async (req, res) => {
         const otpSendRes = await sendOTP(user.email, otpCode);
         if (!otpSendRes.success) {
             console.error('[Register] OTP send failed', otpSendRes.error);
+            // Delete the unverified user if OTP entirely fails to send (optional, but good practice here)
+            await User.findByIdAndDelete(user._id);
+            return res.status(500).json({ 
+                success: false, 
+                error: `Failed to send OTP email: ${otpSendRes.error}` 
+            });
         }
+        
         const payload = {
             success: true,
             otpRequired: true,
@@ -220,7 +227,7 @@ exports.resendOtp = async (req, res) => {
         const otpSendRes = await sendOTP(user.email, otpCode);
         if (!otpSendRes.success) {
             console.error('[resendOtp] OTP send failed', otpSendRes.error);
-            return res.status(500).json({ success: false, error: 'Failed to send OTP via email. Try again later.' });
+            return res.status(500).json({ success: false, error: `Failed to send OTP email: ${otpSendRes.error}` });
         }
 
         const payload = { success: true, message: 'OTP resent to your email' };
