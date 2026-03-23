@@ -95,15 +95,26 @@ app.use('/api/admin', admin);
 if (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') {
     // Set static folder
     const buildPath = path.resolve(__dirname, '../client/dist');
-    app.use(express.static(buildPath));
+    
+    // Check if the build folder exists before trying to serve it
+    const fs = require('fs');
+    if (fs.existsSync(buildPath)) {
+        app.use(express.static(buildPath));
 
-    app.get('*', (req, res) => {
-        // Don't serve API routes as HTML
-        if (req.path.startsWith('/api')) {
-            return res.status(404).json({ success: false, message: 'API route not found' });
-        }
-        res.sendFile(path.resolve(buildPath, 'index.html'));
-    });
+        app.get('*', (req, res) => {
+            // Don't serve API routes as HTML
+            if (req.path.startsWith('/api')) {
+                return res.status(404).json({ success: false, message: 'API route not found' });
+            }
+            res.sendFile(path.resolve(buildPath, 'index.html'));
+        });
+    } else {
+        console.log('Build folder not found at:', buildPath);
+        // Fallback for direct backend deployment
+        app.get('/', (req, res) => {
+            res.status(200).json({ success: true, message: 'API is running' });
+        });
+    }
 }
 
 const PORT = process.env.PORT || 5000;
