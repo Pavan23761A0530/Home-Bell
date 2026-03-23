@@ -92,16 +92,17 @@ app.use('/api/admin/auth', require('./routes/adminAuth'));
 app.use('/api/admin', admin);
 
 // Serve static assets in production (Render/Heroku)
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') {
     // Set static folder
-    app.use(express.static(path.join(__dirname, '../client/dist')));
+    const buildPath = path.resolve(__dirname, '../client/dist');
+    app.use(express.static(buildPath));
 
     app.get('*', (req, res) => {
         // Don't serve API routes as HTML
         if (req.path.startsWith('/api')) {
             return res.status(404).json({ success: false, message: 'API route not found' });
         }
-        res.sendFile(path.resolve(__dirname, '../client', 'dist', 'index.html'));
+        res.sendFile(path.resolve(buildPath, 'index.html'));
     });
 }
 
