@@ -92,7 +92,7 @@ app.use('/api/admin/auth', require('./routes/adminAuth'));
 app.use('/api/admin', admin);
 
 // Serve static assets
-app.use(express.static(path.join(__dirname, "../client/dist")));
+app.use(express.static(path.resolve(__dirname, "../client/dist")));
 
 // Add catch-all route for SPA
 app.get("*", (req, res) => {
@@ -100,7 +100,7 @@ app.get("*", (req, res) => {
     if (req.path.startsWith('/api')) {
         return res.status(404).json({ success: false, message: 'API route not found' });
     }
-    res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+    res.sendFile(path.resolve(__dirname, "../client/dist/index.html"));
 });
 
 const PORT = process.env.PORT || 5000;
