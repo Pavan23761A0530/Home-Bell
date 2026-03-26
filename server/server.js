@@ -91,25 +91,17 @@ app.use('/api/ai', require('./routes/ai'));
 app.use('/api/admin/auth', require('./routes/adminAuth'));
 app.use('/api/admin', admin);
 
-// Serve static assets in production (Render/Heroku)
-if (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') {
-    // Correct Express static serving
-    app.use(express.static(path.join(__dirname, "../client/dist")));
+// Serve static assets
+app.use(express.static(path.join(__dirname, "../client/dist")));
 
-    // Add catch-all route for SPA
-    app.get("*", (req, res) => {
-        // Skip API routes
-        if (req.path.startsWith('/api')) {
-            return res.status(404).json({ success: false, message: 'API route not found' });
-        }
-        res.sendFile(path.join(__dirname, "../client/dist/index.html"));
-    });
-} else {
-    // Development fallback
-    app.get('/', (req, res) => {
-        res.status(200).json({ success: true, message: 'Home Bell API is running' });
-    });
-}
+// Add catch-all route for SPA
+app.get("*", (req, res) => {
+    // Skip API routes
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ success: false, message: 'API route not found' });
+    }
+    res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+});
 
 const PORT = process.env.PORT || 5000;
 
