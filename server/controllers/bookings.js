@@ -677,17 +677,24 @@ exports.cancelBooking = async (req, res) => {
             try {
                 // Razorpay expects refund amounts in paise
                 const refundAmountPaise = Math.round(refundAmount * 100);
-                await razorpay.payments.refund(booking.paymentDetails.razorpay_payment_id, {
+                
+                console.log(`[Refund] Attempting refund for payment ${booking.paymentDetails.razorpay_payment_id}. Amount: ${refundAmount} INR (${refundAmountPaise} paise)`);
+                
+                const refundResponse = await razorpay.payments.refund(booking.paymentDetails.razorpay_payment_id, {
                     amount: refundAmountPaise,
                     notes: {
-                        reason: diffMinutes <= 10 ? 'Cancelled within 10 minutes (Full Refund)' : 'Cancelled after 10 minutes (Partial Refund)'
+                        reason: diffMinutes <= 10 ? 'Cancelled within 10 minutes (Full Refund)' : 'Cancelled after 10 minutes (Partial Refund)',
+                        bookingId: booking._id.toString()
                     }
                 });
 
+                console.log(`[Refund] Success for booking ${booking._id}:`, refundResponse.id);
+
                 refundData = {
+                    refundId: refundResponse.id,
                     refundAmount,
                     refundPercentage: diffMinutes <= 10 ? '100%' : '50%',
-                    refundStatus,
+                    refundStatus: 'COMPLETED',
                     cancelledAt: new Date()
                 };
 
@@ -697,13 +704,23 @@ exports.cancelBooking = async (req, res) => {
                     ...refundData
                 };
                 
-                // Keep the paymentStatus as paid, but they are refunded. We can mark it as refunded. 
-                // Using schema enum: 'pending', 'paid', 'refunded'
                 booking.paymentStatus = 'refunded';
 
             } catch (razorpayErr) {
-                console.error(`Razorpay Refund failed for booking ${booking._id}:`, razorpayErr);
-                return res.status(500).json({ success: false, error: 'Refund processing failed with payment gateway' });
+                console.error(`[Refund] FAILED for booking ${booking._id}:`, JSON.stringify(razorpayErr, null, 2));
+                
+                // If it's a known error (like already refunded), we still want to cancel the booking
+                // but mark the refund as failed in our records for manual intervention
+                booking.paymentDetails = {
+                    ...booking.paymentDetails,
+                    refundStatus: 'FAILED',
+                    refundError: razorpayErr.description || razorpayErr.message || 'Unknown Razorpay Error',
+                    cancelledAt: new Date()
+                };
+                
+                // We still proceed to cancel the booking even if refund gateway call fails,
+                // but we keep paymentStatus as 'paid' or mark as 'refund-failed'
+                // User requirement: Do NOT crash, set refundStatus = "FAILED"
             }
         }
 

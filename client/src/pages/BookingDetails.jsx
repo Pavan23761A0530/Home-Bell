@@ -153,12 +153,21 @@ const BookingDetails = () => {
         try {
             const res = await api.put(`/bookings/${bookingId}/cancel`);
             if (res.data.success) {
+                const updatedBooking = res.data.data;
+                const refundInfo = updatedBooking.paymentDetails;
+                
                 if (isOnlinePayment) {
-                    toast.success(`Refund initiated successfully. ${res.data.data?.paymentDetails?.refundAmount ? `Amount: ₹${res.data.data.paymentDetails.refundAmount}` : ''}`, { id: toastId, duration: 5000 });
+                    if (refundInfo?.refundStatus === 'COMPLETED') {
+                        toast.success(`Refund processed successfully: ₹${refundInfo.refundAmount} (${refundInfo.refundPercentage})`, { id: toastId, duration: 6000 });
+                    } else if (refundInfo?.refundStatus === 'FAILED') {
+                        toast.error(`Booking cancelled, but refund failed: ${refundInfo.refundError}. Please contact support.`, { id: toastId, duration: 8000 });
+                    } else {
+                        toast.success(`Booking cancelled. Refund of ₹${refundInfo?.refundAmount || 'N/A'} initiated.`, { id: toastId });
+                    }
                 } else {
                     toast.success('Booking cancelled successfully', { id: toastId });
                 }
-                setBooking(res.data.data);
+                setBooking(updatedBooking);
             } else {
                 toast.error(res.data.error || 'Failed to cancel booking', { id: toastId });
             }
