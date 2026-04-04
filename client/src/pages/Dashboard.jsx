@@ -135,7 +135,7 @@ const Dashboard = () => {
                         <Card className="pl-6 pr-6 py-8 border-l-4 border-l-purple-500 flex items-center justify-between">
                             <div>
                                 <p className="text-sm font-medium text-neutral-500 uppercase tracking-wide">Total Spent</p>
-                                <p className="text-3xl font-bold text-neutral-900 mt-1">₹{bookings.filter(b => b.status !== 'cancelled').reduce((acc, curr) => acc + curr.price, 0)}</p>
+                                <p className="text-3xl font-bold text-neutral-900 mt-1">₹{bookings.filter(b => b.status !== 'cancelled').reduce((acc, curr) => acc + (curr.finalPrice || curr.price), 0)}</p>
                             </div>
                             <div className="h-12 w-12 rounded-full bg-purple-50 flex items-center justify-center text-purple-600">
                                 <Wallet size={24} />
@@ -192,7 +192,7 @@ const Dashboard = () => {
 
                                                 <div className="hidden sm:block">
                                                     <p className="text-xs text-neutral-400 font-medium uppercase tracking-wider">Total</p>
-                                                    <p className="font-bold text-neutral-900 mt-1">₹{booking.price}</p>
+                                                    <p className="font-bold text-neutral-900 mt-1">₹{booking.finalPrice || booking.price}</p>
                                                 </div>
 
                                                 <div className="flex flex-col items-start sm:items-end gap-2">

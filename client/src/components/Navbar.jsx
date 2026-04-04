@@ -1,6 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Menu, X, User, LogOut, LayoutDashboard, Briefcase, Sun, Moon } from 'lucide-react';
+import { Menu, X, User, LogOut, LayoutDashboard, Briefcase, Sun, Moon, Ticket } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Button from './common/Button';
 import NotificationBell from './NotificationBell';
@@ -118,6 +118,14 @@ const Navbar = () => {
                                         </Button>
                                     </Link>
                                     <NotificationBell />
+                                    {user.role === 'customer' && (
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100 shadow-sm transition-all hover:bg-blue-100">
+                                            <Ticket size={16} className="text-blue-600" />
+                                            <span className="text-xs font-bold tracking-tight">
+                                                {user.couponPoints || 0} PTS
+                                            </span>
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <>

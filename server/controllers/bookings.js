@@ -25,7 +25,7 @@ const normalizeStatus = (status, hasWorker) => {
 // @access  Private (Customer)
 exports.createBooking = async (req, res) => {
     try {
-        const { serviceId, serviceName, date, address = {}, description } = req.body;
+        const { serviceId, serviceName, date, address = {}, description, usePoints, paymentMethod } = req.body;
         if (!serviceId) {
             return res.status(400).json({ success: false, error: 'serviceId is required' });
         }
@@ -80,7 +80,7 @@ exports.createBooking = async (req, res) => {
         }
 
         let assignedProvider = null;
-        let initialStatus = 'searching-provider';
+        let initialStatus = paymentMethod === 'cod' ? 'searching-provider' : 'pending-payment';
 
         if (providerFromService) {
             assignedProvider = providerFromService;
@@ -116,6 +116,45 @@ exports.createBooking = async (req, res) => {
         }
         console.log('Resolved provider price for booking:', { serviceId, providerId: assignedProvider?._id, price: providerPrice });
 
+        let finalPrice = providerPrice;
+        let discountAmount = 0;
+        let usedPoints = 0;
+
+        const userDoc = await User.findById(customerId);
+
+        if (usePoints) {
+            if (userDoc && userDoc.couponPoints >= 50) {
+                discountAmount = providerPrice * 0.10;
+                finalPrice = providerPrice - discountAmount;
+                
+                if (finalPrice < 0) {
+                    discountAmount = providerPrice;
+                    finalPrice = 0;
+                }
+                
+                discountAmount = Math.round(discountAmount * 100) / 100;
+                finalPrice = Math.round(finalPrice * 100) / 100;
+                
+                // Deduct precisely 50 points for this booking discount
+                userDoc.couponPoints -= 50;
+                usedPoints = 50;
+                console.log(`[Coupon Points] Deducted 50 points for 10% discount. Remaining: ${userDoc.couponPoints}`);
+            }
+        }
+        
+        // Native reward increments for COD (since COD never hits /payment/verify)
+        if (paymentMethod === 'cod') {
+            userDoc.couponPoints += 6;
+            console.log(`[Coupon Points] Granted +6 points strictly for COD payment confirmation.`);
+            
+            // Validate bonus threshold dynamically for COD
+            const completedBookings = await Booking.countDocuments({ customer: customerId, status: { $in: ['completed'] } });
+            if (completedBookings === 15) { // exactly 15 historically
+               userDoc.couponPoints += 20;
+               console.log(`[Coupon Points] Bonus +20 hit for 15 COD-aligned bookings!`);
+            }
+        }
+        
         const bookingPayload = {
             customer: customerId,
             service: serviceId,
@@ -126,6 +165,10 @@ exports.createBooking = async (req, res) => {
             },
             description,
             price: providerPrice,
+            finalPrice: finalPrice,
+            originalPrice: providerPrice,
+            discountAmount,
+            usedPoints,
             paymentStatus: 'pending'
         };
 
@@ -136,20 +179,27 @@ exports.createBooking = async (req, res) => {
 
         if (assignedProvider) {
             bookingPayload.provider = assignedProvider._id;
-            bookingPayload.status = 'assigned';
+            // For COD, confirm immediately. For Online, keep pending-payment.
+            if (paymentMethod === 'cod') {
+                bookingPayload.status = 'assigned';
+            }
         }
 
         const booking = await Booking.create(bookingPayload);
+        
+        // Save user points only after booking document is successfully created
+        await userDoc.save();
+        
         try {
             console.log('Created booking document:', booking.toObject());
         } catch {}
 
-        if (assignedProvider) {
+        if (assignedProvider && paymentMethod === 'cod') {
             assignedProvider.currentActiveJobs += 1;
             await assignedProvider.save();
         }
 
-        if (assignedProvider) {
+        if (assignedProvider && paymentMethod === 'cod') {
             await sendBookingNotification(
                 booking._id,
                 'assigned',
@@ -161,7 +211,7 @@ exports.createBooking = async (req, res) => {
         res.status(201).json({
             success: true,
             data: booking,
-            message: 'Booking created and provider assigned.'
+            message: paymentMethod === 'cod' ? 'Booking created and provider assigned.' : 'Booking created. Proceeding to payment.'
         });
     } catch (err) {
         console.error(err);
@@ -350,7 +400,7 @@ exports.updateBookingStatus = async (req, res) => {
                 customerName: booking.customer.name,
                 providerName: booking.provider.user.name,
                 serviceName: booking.service.name,
-                price: booking.price,
+                price: booking.finalPrice || booking.price,
                 date: booking.scheduledDate,
                 address: `${booking.address.street}, ${booking.address.city}`
             });
@@ -371,13 +421,19 @@ exports.updateBookingStatus = async (req, res) => {
         } else if (status === 'completed' && booking.status === 'in-progress') {
             booking.status = 'completed';
 
-            // Release payment (Mock)
-            booking.paymentStatus = 'paid';
+            // If it was an Online payment, ensure paymentStatus is marked as paid
+            // For COD, the payment is typically received at completion
+            if (booking.paymentMethod === 'cod') {
+                booking.paymentStatus = 'paid';
+            }
 
-            // Update provider stats? (done in Review model for rating, but distinct job count could be here)
+            // Update provider stats
             const provider = await ProviderProfile.findById(booking.provider);
-            provider.currentActiveJobs = Math.max(0, provider.currentActiveJobs - 1);
-            await provider.save();
+            if (provider) {
+                provider.currentActiveJobs = Math.max(0, provider.currentActiveJobs - 1);
+                provider.jobsCompleted = (provider.jobsCompleted || 0) + 1;
+                await provider.save();
+            }
 
         } else if (status === 'cancelled') {
             booking.status = 'cancelled';
@@ -441,7 +497,7 @@ exports.getProviderActiveBookings = async (req, res) => {
             const obj = b.toObject();
             obj.statusNormalized = normalizeStatus(b.status, !!b.worker);
             // Expose important fields explicitly for frontend convenience
-            obj.price = b.price;
+            obj.price = b.finalPrice || b.price;
             obj.customerPhone = b.customer?.phone || b.phoneNumber || null;
             obj.address = b.address;
             return obj;
@@ -492,7 +548,7 @@ exports.getProviderActiveBookingsMe = async (req, res) => {
         const normalized = bookings.map(b => {
             const obj = b.toObject();
             obj.statusNormalized = normalizeStatus(b.status, !!b.worker);
-            obj.price = b.price;
+            obj.price = b.finalPrice || b.price;
             obj.customerPhone = b.customer?.phone || b.phoneNumber || null;
             obj.address = b.address;
             
@@ -514,7 +570,7 @@ exports.getWorkerBookings = async (req, res) => {
         const { workerId } = req.params;
         const bookings = await Booking.find({ worker: workerId })
             .populate('service', 'name')
-            .populate('customer', 'name')
+            .populate('customer', 'name email phone addresses')
             .populate({
                 path: 'provider',
                 populate: { path: 'user', select: 'name email' }
@@ -596,8 +652,59 @@ exports.cancelBooking = async (req, res) => {
         }
 
         const diffMinutes = (Date.now() - createdAt) / (60 * 1000);
-        if (diffMinutes > 10) {
-            return res.status(400).json({ success: false, error: 'Cancellation period expired' });
+        
+        let refundData = null;
+
+        // Process Refund if online payment
+        if (booking.paymentStatus === 'paid' && booking.paymentDetails?.razorpay_payment_id) {
+            const Razorpay = require('razorpay');
+            const razorpay = new Razorpay({
+                key_id: process.env.RAZORPAY_KEY_ID,
+                key_secret: process.env.RAZORPAY_KEY_SECRET
+            });
+
+            // Base price calculation (using booking price)
+            const price = Number(booking.finalPrice || booking.price);
+            let refundAmount = price;
+            let refundStatus = 'PROCESSED';
+
+            if (diffMinutes > 10) {
+                // 50% penalty if after 10 minutes
+                refundAmount = price * 0.5;
+                refundStatus = 'PENDING (24h processing)';
+            }
+
+            try {
+                // Razorpay expects refund amounts in paise
+                const refundAmountPaise = Math.round(refundAmount * 100);
+                await razorpay.payments.refund(booking.paymentDetails.razorpay_payment_id, {
+                    amount: refundAmountPaise,
+                    notes: {
+                        reason: diffMinutes <= 10 ? 'Cancelled within 10 minutes (Full Refund)' : 'Cancelled after 10 minutes (Partial Refund)'
+                    }
+                });
+
+                refundData = {
+                    refundAmount,
+                    refundPercentage: diffMinutes <= 10 ? '100%' : '50%',
+                    refundStatus,
+                    cancelledAt: new Date()
+                };
+
+                // Store inside paymentDetails
+                booking.paymentDetails = {
+                    ...booking.paymentDetails,
+                    ...refundData
+                };
+                
+                // Keep the paymentStatus as paid, but they are refunded. We can mark it as refunded. 
+                // Using schema enum: 'pending', 'paid', 'refunded'
+                booking.paymentStatus = 'refunded';
+
+            } catch (razorpayErr) {
+                console.error(`Razorpay Refund failed for booking ${booking._id}:`, razorpayErr);
+                return res.status(500).json({ success: false, error: 'Refund processing failed with payment gateway' });
+            }
         }
 
         booking.status = 'cancelled';

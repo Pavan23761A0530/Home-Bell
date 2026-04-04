@@ -150,7 +150,7 @@ const AdminBookings = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-neutral-900">
                                         <div className="flex items-center gap-1">
                                             <DollarSign size={14} className="text-neutral-400" />
-                                            {booking.price ? `₹${booking.price}` : 'Quote'}</div>
+                                            {booking.finalPrice || booking.price ? `₹${booking.finalPrice || booking.price}` : 'Quote'}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end gap-2">

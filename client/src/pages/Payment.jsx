@@ -31,31 +31,37 @@ const Payment = () => {
     const platformFee = 0;
     const handlePayment = async (e) => {
         e.preventDefault();
+        console.log('[Payment UI] Pay Now button clicked!');
         setProcessing(true);
         
         try {
             // Load Razorpay script dynamically
+            console.log('[Payment UI] Proceeding to load Razorpay checkout script');
             const script = document.createElement('script');
             script.src = 'https://checkout.razorpay.com/v1/checkout.js';
             script.onload = () => {
+                console.log('[Payment UI] Razorpay script loaded, creating order on backend');
                 // Create order on backend
-                api.post('/payments/create-order', {
+                api.post('/payment/create-order', {
                     amount: Math.round((booking.price + platformFee) * 100), // Convert to paisa
                     currency: 'INR',
                     bookingId: booking._id
                 }).then(orderRes => {
                     if (orderRes.data.success) {
+                        console.log('[Payment UI] Successfully received API response object:', orderRes.data);
+                        console.log('[Payment UI] Parsed order details:', orderRes.data.order);
+                        
                         const options = {
-                            key: 'rzp_test_1DP5mmOlF5G5ag', // Replace with your Razorpay key
-                            amount: Math.round((booking.price + platformFee) * 100), // Amount in paisa
-                            currency: 'INR',
+                            key: orderRes.data.keyId, // Fetched securely from backend
+                            amount: orderRes.data.order.amount, // Secured amount calculated from server
+                            currency: orderRes.data.order.currency,
                             name: 'LocalServe',
                             description: `Payment for ${booking.service?.name}`,
                             order_id: orderRes.data.order.id,
                             handler: async function(response) {
                                 // Verify payment and update booking
                                 try {
-                                    const verifyRes = await api.post('/payments/verify-payment', {
+                                    const verifyRes = await api.post('/payment/verify', {
                                         razorpay_order_id: response.razorpay_order_id,
                                         razorpay_payment_id: response.razorpay_payment_id,
                                         razorpay_signature: response.razorpay_signature,
@@ -64,7 +70,7 @@ const Payment = () => {
                                     
                                     if (verifyRes.data.success) {
                                         toast.success('Payment Successful!');
-                                        navigate(`/bookings/${bookingId}`);
+                                        navigate('/payment-success', { state: { paymentData: verifyRes.data.paymentData } });
                                     }
                                 } catch (err) {
                                     toast.error('Payment verification failed');
@@ -82,10 +88,16 @@ const Payment = () => {
                         
                         const rzp = new window.Razorpay(options);
                         rzp.open();
+                        console.log('[Payment UI] Razorpay widget opened');
+                        setProcessing(false);
+                    } else {
+                        console.error('[Payment UI] Order creation failed based on backend success flag:', orderRes.data);
+                        toast.error('Order creation failed');
                         setProcessing(false);
                     }
                 }).catch(err => {
-                    toast.error('Failed to initiate payment');
+                    console.error('[Payment UI] Error hitting /payment/create-order:', err.response?.data || err.message);
+                    toast.error(err.response?.data?.error || 'Failed to initiate payment');
                     setProcessing(false);
                 });
             };
@@ -143,13 +155,19 @@ const Payment = () => {
                         <span className="text-gray-600">Service Fee</span>
                         <span className="font-medium">₹{booking.price}</span>
                     </div>
+                    {booking.discountAmount > 0 && (
+                        <div className="flex justify-between text-sm mb-1 text-green-600">
+                            <span className="text-green-600 font-medium">Discount Applied</span>
+                            <span className="font-bold">- ₹{booking.discountAmount}</span>
+                        </div>
+                    )}
                     <div className="flex justify-between text-sm mb-1">
                         <span className="text-gray-600">Platform Fee</span>
                         <span className="font-medium">₹{platformFee.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm font-bold border-t border-gray-200 pt-2 mt-2">
-                        <span>Total</span>
-                        <span>₹{booking.price + platformFee}</span>
+                        <span>Total Due</span>
+                        <span>₹{booking.finalPrice + platformFee}</span>
                     </div>
                 </div>
                                 
@@ -166,13 +184,19 @@ const Payment = () => {
                         <span className="text-gray-500">Service Fee</span>
                         <span className="font-medium">₹{booking.price}</span>
                     </div>
+                    {booking.discountAmount > 0 && (
+                        <div className="flex justify-between text-sm text-green-600">
+                            <span className="text-green-600 font-medium">Points Discount</span>
+                            <span className="font-bold">- ₹{booking.discountAmount}</span>
+                        </div>
+                    )}
                     <div className="flex justify-between text-sm">
                         <span className="text-gray-500">Platform Fee</span>
                         <span className="font-medium">₹{platformFee.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-lg font-bold border-t border-gray-200 pt-2 mt-2">
                         <span>Total</span>
-                        <span>₹{booking.price + platformFee}</span>
+                        <span>₹{booking.finalPrice + platformFee}</span>
                     </div>
                 </div>
 
@@ -183,7 +207,7 @@ const Payment = () => {
                         className="w-full flex justify-center py-4 px-4 border border-transparent text-base font-bold rounded-md text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-70 transition-all duration-200 shadow-lg"
                     >
                         <CreditCard className="h-5 w-5 text-white mr-2" />
-                        {processing ? 'Processing Payment...' : `Pay Now ₹${booking.price + platformFee}`}
+                        {processing ? 'Processing Payment...' : `Pay Now ₹${booking.finalPrice + platformFee}`}
                     </button>
                 </form>
             </div>

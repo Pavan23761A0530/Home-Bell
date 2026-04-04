@@ -13,7 +13,9 @@ const jwt = require('jsonwebtoken');  // Added missing jwt import
 // Load env vars
 
 dotenv.config({ path: path.resolve(__dirname, '.env') });
-console.log('Groq key loaded:', !!process.env.GROQ_API_KEY);
+console.log('[System] Groq key loaded:', !!process.env.GROQ_API_KEY);
+console.log('[System] Razorpay Key ID loaded:', !!process.env.RAZORPAY_KEY_ID);
+console.log('[System] Razorpay Key Secret loaded:', !!process.env.RAZORPAY_KEY_SECRET);
 
 // Connect to database
 connectDB().catch(() => {
@@ -75,6 +77,8 @@ const reviews = require('./routes/reviews');
 const notifications = require('./routes/notifications');
 const workers = require('./routes/workers');
 const addresses = require('./routes/addressRoutes');
+const payments = require('./routes/payments');
+const coupons = require('./routes/coupons');
 
 // Mount routers
 app.use('/api/auth', auth);
@@ -86,6 +90,8 @@ app.use('/api/reviews', reviews);
 app.use('/api/notifications', notifications);
 app.use('/api/workers', workers);
 app.use('/api/addresses', addresses);
+app.use('/api/payment', payments);
+app.use('/api/coupons', coupons);
 app.use('/api/ai', require('./routes/ai'));
 
 app.use('/api/admin/auth', require('./routes/adminAuth'));

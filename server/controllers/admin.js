@@ -20,7 +20,7 @@ exports.getAdminStats = async (req, res) => {
             Booking.countDocuments({ status: { $in: ['assigned', 'accepted', 'in-progress'] } }),
             Booking.aggregate([
                 { $match: { status: 'completed' } },
-                { $group: { _id: null, total: { $sum: '$price' } } }
+                { $group: { _id: null, total: { $sum: { $ifNull: ['$finalPrice', '$price'] } } } }
             ]),
             Service.countDocuments()
         ]);

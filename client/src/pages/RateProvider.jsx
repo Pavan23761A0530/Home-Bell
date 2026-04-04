@@ -40,9 +40,8 @@ const RateProvider = () => {
         try {
             const res = await api.post('/reviews', {
                 bookingId: booking._id,
-                providerId: booking.provider?._id,
                 rating,
-                review,
+                comment: review,
                 reviewOptions
             });
 
@@ -54,7 +53,7 @@ const RateProvider = () => {
             }
         } catch (error) {
             console.error('Error submitting review:', error);
-            toast.error('Failed to submit review');
+            toast.error(error.response?.data?.error || 'Failed to submit review');
         } finally {
             setLoading(false);
         }

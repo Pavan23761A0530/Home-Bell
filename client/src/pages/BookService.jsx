@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { MapPin, Calendar, Check, AlertCircle, Clock, ChevronRight, ChevronLeft, CreditCard, Star, Shield, Search, Navigation } from 'lucide-react';
+import { MapPin, Calendar, Check, AlertCircle, Clock, ChevronRight, ChevronLeft, CreditCard, Star, Shield, Search, Navigation, Ticket } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Card from '../components/common/Card';
@@ -13,7 +13,7 @@ import Badge from '../components/common/Badge';
 const BookService = () => {
     const { serviceId } = useParams();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, checkUserLoggedIn } = useAuth();
     const location = useLocation();
     const [service, setService] = useState(null);
     const [step, setStep] = useState(1);
@@ -25,6 +25,7 @@ const BookService = () => {
     const [date, setDate] = useState('');
     const [time, setTime] = useState('');
     const [phone, setPhone] = useState('');
+    const [phoneError, setPhoneError] = useState('');
     const [address, setAddress] = useState({
         street: '',
         city: '',
@@ -36,6 +37,10 @@ const BookService = () => {
     const [description, setDescription] = useState('');
     const [isMapVisible, setIsMapVisible] = useState(false);
     const [geolocationEnabled, setGeolocationEnabled] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState('cod');
+    
+    // Coupon Points State
+    const [usePoints, setUsePoints] = useState(false);
 
     useEffect(() => {
         // Prefer service from navigation state to avoid flicker and ensure consistency
@@ -118,6 +123,22 @@ const BookService = () => {
         toast.success('Location selected on map!');
     };
 
+    const handlePhoneChange = (e) => {
+        const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+        setPhone(value);
+        
+        const phoneRegex = /^[0-9]{10}$/;
+        if (value.length === 0) {
+            setPhoneError('Phone number is required');
+        } else if (value.length < 10) {
+            setPhoneError('Phone number must be 10 digits');
+        } else if (!phoneRegex.test(value)) {
+            setPhoneError('Invalid phone number format');
+        } else {
+            setPhoneError('');
+        }
+    };
+
     const confirmBooking = async () => {
         setSubmitting(true);
         setError('');
@@ -137,13 +158,24 @@ const BookService = () => {
                     lng: address.lng
                 },
                 phoneNumber: phone,
-                description
+                description,
+                paymentMethod,
+                usePoints
             };
 
-            await api.post('/bookings', payload);
+            const res = await api.post('/bookings', payload);
 
-            toast.success('Booking confirmed! Redirecting...', { id: toastId });
-            setTimeout(() => navigate('/dashboard'), 1500);
+            // Refresh user points immediately after booking (reward or deduction)
+            await checkUserLoggedIn();
+
+            if (paymentMethod === 'cod') {
+                toast.success('Booking confirmed! Redirecting...', { id: toastId });
+                setTimeout(() => navigate('/dashboard'), 1500);
+            } else {
+                toast.success('Order created! Proceeding to payment...', { id: toastId });
+                const bookingId = res.data.data?._id || res.data.booking?._id || res.data._id;
+                setTimeout(() => navigate(`/payment/${bookingId}`), 1500);
+            }
 
         } catch (err) {
             console.error(err);
@@ -356,8 +388,9 @@ const BookService = () => {
                                         <Input
                                             label="Phone Number"
                                             value={phone}
-                                            onChange={(e) => setPhone(e.target.value)}
-                                            placeholder="+91 98765 43210"
+                                            onChange={handlePhoneChange}
+                                            placeholder="Enter 10-digit phone number"
+                                            error={phoneError}
                                             required
                                         />
                                         <p className="text-xs text-neutral-500 mt-2">
@@ -370,7 +403,7 @@ const BookService = () => {
                                         </Button>
                                         <Button
                                             onClick={() => setStep(3)}
-                                            disabled={!address.street || !address.city || !address.zip || !phone}
+                                            disabled={!address.street || !address.city || !address.zip || phone.length !== 10 || !!phoneError}
                                             className="gap-2"
                                         >
                                             Next Step <ChevronRight size={16} />
@@ -395,16 +428,90 @@ const BookService = () => {
 
                                         {typeof service?.price === 'number' && (
                                             <div className="bg-neutral-50 p-4 rounded-lg space-y-3 border border-neutral-100">
-                                                <div className="flex justify-between text-sm">
+                                                
+                                                {/* Coupon Points Section */}
+                                                <div className="pb-4 border-b border-neutral-200 space-y-3">
+                                                    <div className="flex justify-between items-center bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                                        <div>
+                                                            <p className="font-semibold text-blue-900 flex items-center gap-2">
+                                                                <Ticket size={16} className="text-blue-600" /> 
+                                                                You have {user?.couponPoints || 0} Coupon Points
+                                                            </p>
+                                                            {user?.couponPoints >= 50 ? (
+                                                                <p className="text-sm text-blue-700 mt-1">Use 50 points to get 10% discount</p>
+                                                            ) : (
+                                                                <p className="text-sm text-blue-700 mt-1">Earn more points by booking services</p>
+                                                            )}
+                                                        </div>
+                                                        {user?.couponPoints >= 50 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setUsePoints(!usePoints)}
+                                                                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors border ${
+                                                                    usePoints 
+                                                                    ? 'bg-blue-100 text-blue-800 border-blue-300' 
+                                                                    : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                                                                }`}
+                                                            >
+                                                                {usePoints ? 'Points Applied' : 'Apply Coupon Discount'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex justify-between text-sm pt-2">
                                                     <span className="text-neutral-500">Service Fee</span>
                                                     <span className="font-medium">₹{Number(service.price).toFixed(2)}</span>
                                                 </div>
-                                                <div className="pt-3 border-t border-neutral-200 flex justify-between items-center">
-                                                    <span className="font-bold text-neutral-900">Total</span>
-                                                    <span className="text-xl font-bold text-primary-600">₹{Number(service.price).toFixed(2)}</span>
+                                                
+                                                {usePoints && (
+                                                    <div className="space-y-1">
+                                                        <div className="flex justify-between text-sm text-success-600 font-medium">
+                                                            <span className="flex items-center gap-1">50 points used → 10% discount applied</span>
+                                                            <span>- ₹{(Number(service.price) * 0.1).toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="text-xs text-neutral-500 italic">
+                                                            Remaining points: {(user?.couponPoints || 0) - 50}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="pt-3 border-t border-neutral-200 flex justify-between items-center bg-white p-3 rounded shadow-sm border mt-3">
+                                                    <span className="font-bold text-neutral-900">Total Due</span>
+                                                    <span className="text-xl font-bold text-primary-600">
+                                                        ₹{usePoints ? (Number(service.price) * 0.9).toFixed(2) : Number(service.price).toFixed(2)}
+                                                    </span>
                                                 </div>
                                             </div>
                                         )}
+
+                                        <div className="pt-4 border-t border-neutral-100">
+                                            <h3 className="text-sm font-medium text-neutral-900 mb-3 block">Payment Method</h3>
+                                            <div className="space-y-3">
+                                                <label className="flex items-center p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50 transition-colors">
+                                                    <input 
+                                                        type="radio" 
+                                                        name="paymentMethod" 
+                                                        value="cod"
+                                                        checked={paymentMethod === 'cod'}
+                                                        onChange={(e) => setPaymentMethod(e.target.value)}
+                                                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300"
+                                                    />
+                                                    <span className="ml-3 font-medium text-neutral-900">Cash on Delivery (COD)</span>
+                                                </label>
+                                                <label className="flex items-center p-3 border border-neutral-200 rounded-lg cursor-pointer hover:bg-neutral-50 transition-colors">
+                                                    <input 
+                                                        type="radio" 
+                                                        name="paymentMethod" 
+                                                        value="online"
+                                                        checked={paymentMethod === 'online'}
+                                                        onChange={(e) => setPaymentMethod(e.target.value)}
+                                                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300"
+                                                    />
+                                                    <span className="ml-3 font-medium text-neutral-900">Pay Online</span>
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div className="flex justify-between pt-4">
@@ -414,6 +521,7 @@ const BookService = () => {
                                         <Button
                                             onClick={confirmBooking}
                                             isLoading={submitting}
+                                            disabled={phone.length !== 10 || !!phoneError}
                                             className="gap-2 bg-success-500 hover:bg-success-700 focus:ring-success-500"
                                         >
                                             Confirm Booking <Check size={16} />
@@ -459,6 +567,13 @@ const BookService = () => {
                                             {address.lat && address.lng && (
                                                 <p className="text-xs text-neutral-400 mt-1">GPS: ({address.lat.toFixed(4)}, {address.lng.toFixed(4)})</p>
                                             )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3">
+                                        <CreditCard size={16} className="mt-0.5" />
+                                        <div>
+                                            <p className="text-neutral-300 font-medium">Payment Method</p>
+                                            <p>{paymentMethod === 'online' ? 'Pay Online' : 'Cash on Delivery (COD)'}</p>
                                         </div>
                                     </div>
                                 </div>

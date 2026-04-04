@@ -8,10 +8,21 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+// Utility to load Razorpay script dynamically
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
 const BookingDetails = () => {
     const { bookingId } = useParams();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, checkUserLoggedIn } = useAuth();
     const [booking, setBooking] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -45,32 +56,115 @@ const BookingDetails = () => {
         }
     };
 
+    const handlePayment = async () => {
+        const isLoaded = await loadRazorpayScript();
+        if (!isLoaded) {
+            toast.error('Razorpay SDK failed to load. Are you online?');
+            return;
+        }
+
+        const toastId = toast.loading('Initiating secure payment...');
+        
+        try {
+            // Create order on backend
+            const orderRes = await api.post('/payment/create-order', {
+                bookingId: booking._id
+            });
+
+            if (orderRes.data.success) {
+                toast.dismiss(toastId);
+                
+                const options = {
+                    key: orderRes.data.keyId,
+                    amount: orderRes.data.order.amount,
+                    currency: orderRes.data.order.currency,
+                    name: 'LocalServe',
+                    description: `Payment for ${booking.service?.name}`,
+                    order_id: orderRes.data.order.id,
+                    handler: async function(response) {
+                        try {
+                            const verifyToast = toast.loading('Verifying payment...');
+                            const verifyRes = await api.post('/payment/verify', {
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                                bookingId: booking._id
+                            });
+                            
+                            if (verifyRes.data.success) {
+                                // Refresh user points (reward +6)
+                                await checkUserLoggedIn();
+                                
+                                toast.success('Payment Successful!', { id: verifyToast });
+                                navigate('/payment-success', { state: { paymentData: verifyRes.data.paymentData } });
+                            }
+                        } catch (err) {
+                            toast.error('Payment verification failed');
+                        }
+                    },
+                    prefill: {
+                        name: user?.name,
+                        email: user?.email,
+                        contact: booking.phoneNumber || ''
+                    },
+                    theme: {
+                        color: '#3b82f6'
+                    }
+                };
+                
+                const rzp = new window.Razorpay(options);
+                rzp.on('payment.failed', function (response) {
+                    toast.error(response.error.description || 'Payment Failed');
+                });
+                rzp.open();
+            } else {
+                toast.error('Failed to create payment order', { id: toastId });
+            }
+        } catch (err) {
+            console.error('[Payment Error]', err);
+            toast.error(err.response?.data?.error || 'Failed to initiate payment', { id: toastId });
+        }
+    };
+
     const handleCancelBooking = async () => {
         if (!booking) return;
 
+        const isOnlinePayment = booking.paymentStatus === 'paid';
         const createdAt = booking.createdAt ? new Date(booking.createdAt).getTime() : null;
-        if (!createdAt) {
-            toast.error('Unable to cancel this booking');
-            return;
+        let refundMsg = "";
+        
+        if (isOnlinePayment && createdAt) {
+            const diffMs = Date.now() - createdAt;
+            if (diffMs <= 10 * 60 * 1000) {
+                refundMsg = "Cancel within 10 minutes → 100% refund";
+            } else {
+                refundMsg = "Cancel after 10 minutes → 50% refund (processed in 24 hours)";
+            }
         }
 
-        const diffMs = Date.now() - createdAt;
-        if (diffMs > 10 * 60 * 1000) {
-            toast.error('Cancellation period expired');
-            return;
-        }
+        const confirmText = refundMsg 
+            ? `Are you sure you want to cancel this booking?\n\nRefund Policy:\n${refundMsg}`
+            : 'Are you sure you want to cancel this booking?';
+
+        if (!window.confirm(confirmText)) return;
+
+        const toastId = toast.loading('Processing cancellation...');
 
         try {
             const res = await api.put(`/bookings/${bookingId}/cancel`);
             if (res.data.success) {
-                toast.success('Booking cancelled successfully');
+                if (isOnlinePayment) {
+                    toast.success(`Refund initiated successfully. ${res.data.data?.paymentDetails?.refundAmount ? `Amount: ₹${res.data.data.paymentDetails.refundAmount}` : ''}`, { id: toastId, duration: 5000 });
+                } else {
+                    toast.success('Booking cancelled successfully', { id: toastId });
+                }
                 setBooking(res.data.data);
             } else {
-                toast.error(res.data.error || 'Failed to cancel booking');
+                toast.error(res.data.error || 'Failed to cancel booking', { id: toastId });
             }
         } catch (err) {
             const message = err.response?.data?.error || err.response?.data?.message || 'Failed to cancel booking';
-            toast.error(message);
+            toast.error(message, { id: toastId });
         }
     };
 
@@ -86,8 +180,7 @@ const BookingDetails = () => {
         { status: 'arrived', label: 'Provider Arrived', icon: '📍' },
         { status: 'in-progress', label: 'Service In Progress', icon: '🔧' },
         { status: 'completed', label: 'Completed', icon: '🎉' },
-        { status: 'paid', label: 'Payment Received', icon: '💳' },
-        { status: 'reviewed', label: 'Reviewed', icon: '⭐' }
+        { status: 'paid', label: 'Payment Received', icon: '💳' }
     ];
 
     const statusColors = {
@@ -99,11 +192,18 @@ const BookingDetails = () => {
         'in-progress': 'bg-orange-500',
         completed: 'bg-green-600',
         paid: 'bg-teal-500',
-        reviewed: 'bg-pink-500',
         cancelled: 'bg-red-500'
     };
 
-    const currentStepIndex = steps.findIndex(s => s.status === booking.status);
+    const getTimelineIndex = () => {
+        const statusIdx = steps.findIndex(s => s.status === booking.status);
+        if (booking.paymentStatus === 'paid' && statusIdx < steps.length - 1) {
+            return steps.findIndex(s => s.status === 'paid');
+        }
+        return statusIdx;
+    };
+
+    const currentStepIndex = getTimelineIndex();
 
     return (
         <div className="space-y-6">
@@ -132,8 +232,16 @@ const BookingDetails = () => {
 
                     <div className="space-y-6 relative z-10">
                         {steps.map((step, index) => {
-                            const isCompleted = steps.findIndex(s => s.status === booking.status) >= index;
-                            const isCurrent = step.status === booking.status;
+                            let isCompleted = false;
+                            let isCurrent = false;
+
+                            if (step.status === 'paid') {
+                                isCompleted = booking.paymentStatus === 'paid';
+                                isCurrent = isCompleted && booking.status === 'completed';
+                            } else {
+                                isCompleted = steps.findIndex(s => s.status === booking.status) >= index;
+                                isCurrent = step.status === booking.status;
+                            }
 
                             return (
                                 <div key={step.status} className="flex items-start">
@@ -150,9 +258,11 @@ const BookingDetails = () => {
                                                 {step.icon} {step.label}
                                             </h4>
                                             <span className="text-xs text-gray-500">
-                                                {booking.statusHistory?.find(h => h.status === step.status)?.timestamp
-                                                    ? new Date(booking.statusHistory.find(h => h.status === step.status).timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                                    : 'Pending'}
+                                                {step.status === 'paid' && booking.paymentDetails?.verifiedAt
+                                                    ? new Date(booking.paymentDetails.verifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                    : booking.statusHistory?.find(h => h.status === step.status)?.timestamp
+                                                        ? new Date(booking.statusHistory.find(h => h.status === step.status).timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                        : 'Pending'}
                                             </span>
                                         </div>
                                         {isCurrent && (
@@ -170,13 +280,13 @@ const BookingDetails = () => {
                     <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-700">Overall Progress</span>
                         <span className="text-sm font-bold text-blue-600">
-                            {Math.round(((steps.findIndex(s => s.status === booking.status) + 1) / steps.length) * 100)}%
+                            {Math.round(((currentStepIndex + 1) / steps.length) * 100)}%
                         </span>
                     </div>
                     <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
                         <div
                             className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500"
-                            style={{ width: `${(steps.findIndex(s => s.status === booking.status) + 1) / steps.length * 100}%` }}
+                            style={{ width: `${(currentStepIndex + 1) / steps.length * 100}%` }}
                         ></div>
                     </div>
                 </div>
@@ -210,14 +320,17 @@ const BookingDetails = () => {
                                 <p className="text-sm text-gray-600">"{booking.description}"</p>
                             </div>
                         )}
-                        {user?.role === 'customer' && !['cancelled', 'completed'].includes(booking.status) && (
+                        {user?.role === 'customer' && !['cancelled', 'completed', 'disputed'].includes(booking.status) && (
                             <div className="pt-4 border-t border-gray-100">
                                 <button
                                     onClick={handleCancelBooking}
-                                    className="w-full bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-100 font-semibold text-sm"
+                                    className="w-full bg-red-50 text-red-600 py-3 rounded-lg hover:bg-red-100 font-semibold text-sm transition-colors border border-red-200"
                                 >
-                                    Cancel Booking (10-minute window)
+                                    Cancel Booking
                                 </button>
+                                {booking.paymentStatus === 'paid' && (
+                                    <p className="text-xs text-center text-red-400 mt-2">Cancellation refund policies apply</p>
+                                )}
                             </div>
                         )}
                     </div>
@@ -243,11 +356,11 @@ const BookingDetails = () => {
                                 </button>
                             ) : booking.paymentStatus === 'pending' ? (
                                 <button
-                                    onClick={() => window.location.href = `/payment/${bookingId}`}
-                                    className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 font-semibold flex items-center justify-center animate-bounce"
+                                    onClick={handlePayment}
+                                    className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 font-semibold flex items-center justify-center animate-pulse shadow-md transition transform hover:-translate-y-1"
                                 >
                                     <DollarSign className="mr-2" size={18} />
-                                    Secure Payment Required
+                                    Launch Secure Checkout Action
                                 </button>
                             ) : (
                                 <div className="space-y-3">
@@ -255,7 +368,7 @@ const BookingDetails = () => {
                                         <CheckCircle className="mr-2" size={18} />
                                         Payment Completed
                                     </div>
-                                    {booking.status === 'completed' && (
+                                    {booking.status === 'completed' && booking.paymentStatus === 'paid' && (
                                         <button
                                             onClick={() => navigate('/rate-provider', { state: { booking } })}
                                             className="w-full bg-yellow-500 text-white py-2 rounded-lg hover:bg-yellow-600 font-semibold flex items-center justify-center"

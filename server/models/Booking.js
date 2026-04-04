@@ -26,6 +26,7 @@ const bookingSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: [
+            'pending-payment',
             'searching-provider',
             'assigned',
             'accepted',
@@ -34,7 +35,7 @@ const bookingSchema = new mongoose.Schema({
             'cancelled',
             'disputed'
         ],
-        default: 'searching-provider'
+        default: 'pending-payment'
     },
     scheduledDate: {
         type: Date,
@@ -61,7 +62,25 @@ const bookingSchema = new mongoose.Schema({
         enum: ['pending', 'paid', 'refunded'],
         default: 'pending'
     },
+    paymentDetails: {
+        type: mongoose.Schema.Types.Mixed
+    },
+    usedPoints: {
+        type: Number,
+        default: 0
+    },
+    originalPrice: {
+        type: Number
+    },
+    discountAmount: {
+        type: Number,
+        default: 0
+    },
     price: {
+        type: Number,
+        required: true
+    },
+    finalPrice: {
         type: Number,
         required: true
     },

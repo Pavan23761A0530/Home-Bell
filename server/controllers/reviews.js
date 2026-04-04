@@ -23,6 +23,10 @@ exports.addReview = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Service must be completed to review' });
         }
 
+        if (booking.paymentStatus !== 'paid') {
+            return res.status(400).json({ success: false, error: 'Payment must be completed to review' });
+        }
+
         // Check if review already exists
         const existingReview = await Review.findOne({ booking: bookingId });
         if (existingReview) {
@@ -33,18 +37,18 @@ exports.addReview = async (req, res) => {
             booking: bookingId,
             customer: req.user.id,
             provider: booking.provider,
-            rating,
-            comment
+            rating: Number(rating),
+            comment: comment || ''
         });
 
         // Update Provider Average Rating & Reviews Count
         const profile = await ProviderProfile.findById(booking.provider);
-        const reviews = await Review.find({ provider: booking.provider });
-
-        profile.reviewsCount = reviews.length;
-        profile.rating = reviews.reduce((acc, item) => item.rating + acc, 0) / reviews.length;
-
-        await profile.save();
+        if (profile) {
+            const reviews = await Review.find({ provider: booking.provider });
+            profile.reviewsCount = reviews.length;
+            profile.rating = reviews.reduce((acc, item) => item.rating + acc, 0) / reviews.length;
+            await profile.save();
+        }
 
         res.status(201).json({ success: true, data: review });
     } catch (err) {

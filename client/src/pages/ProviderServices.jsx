@@ -54,7 +54,11 @@ const ProviderServices = () => {
                 api.get('/services')
             ]);
 
-            if (myServicesRes.data.success) setServices(myServicesRes.data.data);
+            if (myServicesRes.data.success) {
+                // Filter out any services that might be null due to deletion
+                const validOfferings = (myServicesRes.data.data || []).filter(item => item && item.service);
+                setServices(validOfferings);
+            }
             if (allServicesRes.data.success) setAvailableServices(allServicesRes.data.data);
         } catch (error) {
             console.error(error);
@@ -90,6 +94,7 @@ const ProviderServices = () => {
     };
 
     const startEdit = (offering) => {
+        if (!offering?.service?._id) return;
         setEditingService(offering);
         setSelectedServiceId(offering.service._id);
         setCustomPrice(offering.providerPrice || '');
@@ -98,6 +103,7 @@ const ProviderServices = () => {
     };
 
     const handleRemoveService = async (serviceId) => {
+        if (!serviceId) return;
         if (!window.confirm("Are you sure you want to stop offering this service?")) return;
         try {
             await api.delete(`/providers/services/${serviceId}`);
@@ -249,14 +255,14 @@ const ProviderServices = () => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {services.length > 0 ? (
-                            services.map((item) => (
-                                <tr key={item.service._id}>
+                            services.map((item, index) => (
+                                <tr key={item.service?._id || index}>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">{item.service.name}</div>
+                                        <div className="text-sm font-medium text-gray-900">{item.service?.name || 'Unknown Service'}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="text-sm text-gray-500">
-                                            {typeof item.service.category === 'object' ? item.service.category?.name : item.service.category}
+                                            {typeof item.service?.category === 'object' ? item.service.category?.name : (item.service?.category || 'No Category')}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">

@@ -4,7 +4,7 @@ import Button from '../components/common/Button';
 import Badge from '../components/common/Badge';
 import Loader from '../components/common/Loader';
 import api from '../services/api';
-import { Briefcase, CheckCircle, Clock, MapPin, Calendar, DollarSign } from 'lucide-react';
+import { Briefcase, CheckCircle, Clock, MapPin, Calendar, DollarSign, User, Phone, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 import toast from 'react-hot-toast';
@@ -58,12 +58,91 @@ const WorkerDashboard = () => {
 
   if (loading) return <div className="flex justify-center py-20"><Loader size="lg" /></div>;
 
-  const pending = assignments.filter(a => a.status === 'searching-provider');
   const assigned = assignments.filter(a => a.status === 'assigned');
   const ongoing = assignments.filter(a => a.status === 'accepted' || a.status === 'in-progress');
   const completed = assignments.filter(a => a.status === 'completed');
   const cancelled = assignments.filter(a => a.status === 'cancelled');
   const totalEarnings = completed.reduce((sum, b) => sum + (typeof b.price === 'number' ? b.price : 0), 0);
+
+  const renderJobCard = (a, borderColor) => (
+    <Card key={a._id} className={`border-l-4 ${borderColor}`}>
+      <div className="flex flex-col md:flex-row gap-6">
+        <div className="flex-grow space-y-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <Badge variant="neutral" className="mb-2">
+                {a.service?.name || 'Service'}
+              </Badge>
+              <div className="flex flex-col gap-1">
+                <h3 className="text-lg font-bold text-neutral-900 flex items-center gap-2">
+                  <User size={18} className="text-primary-500" />
+                  {a.customer?.name || 'Customer'}
+                </h3>
+                {a.customer?.phone && (
+                  <p className="text-sm text-neutral-600 flex items-center gap-2">
+                    <Phone size={14} className="text-neutral-400" />
+                    {a.customer.phone}
+                  </p>
+                )}
+                {a.customer?.email && (
+                  <p className="text-sm text-neutral-600 flex items-center gap-2">
+                    <Mail size={14} className="text-neutral-400" />
+                    {a.customer.email}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="text-right">
+              <Badge variant={(a.status === 'in-progress' || a.status === 'ongoing') ? 'warning' : a.status === 'completed' ? 'success' : 'primary'} className="capitalize">
+                {(a.statusNormalized || a.status).replace('-', ' ')}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-neutral-600">
+            <div className="flex items-center gap-2">
+              <Calendar size={16} className="text-neutral-400" />
+              <span>
+                {a.scheduledDate
+                  ? new Date(a.scheduledDate).toLocaleString()
+                  : 'Schedule TBD'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <MapPin size={16} className="text-neutral-400" />
+              <span className="truncate">
+                {a.address?.street 
+                  ? `${a.address.street}, ${a.address.city || ''} ${a.address.state || ''}`.trim()
+                  : (a.customer?.address || 'Address hidden')}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-row md:flex-col justify-end gap-2 md:w-48 border-t md:border-t-0 md:border-l border-neutral-100 pt-4 md:pt-0 md:pl-6">
+          {['assigned', 'accepted'].includes(a.status) && (
+            <Button
+              variant="outline"
+              className="w-full justify-center"
+              onClick={() => updateJobStatus(a._id, 'ongoing')}
+            >
+              <Clock size={16} className="mr-2" />
+              Start Job
+            </Button>
+          )}
+          {['in-progress', 'ongoing', 'accepted'].includes(a.status) && (
+            <Button
+              className="w-full justify-center bg-success-600 hover:bg-success-700"
+              onClick={() => updateJobStatus(a._id, 'completed')}
+            >
+              <CheckCircle size={16} className="mr-2" />
+              Complete
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg)', color: 'var(--text)' }}>
@@ -112,146 +191,67 @@ const WorkerDashboard = () => {
         </div>
 
         <div className="space-y-8">
-          <h2 className="text-xl font-bold text-neutral-900">Assigned Works</h2>
-          {assigned.length > 0 ? assigned.map(a => (
-            <Card key={a._id} className="border-l-4 border-l-primary-500">
-              <div className="flex flex-col md:flex-row gap-6">
-                <div className="flex-grow space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <Badge variant="neutral" className="mb-2">
-                        {a.service?.name || 'Service'}
-                      </Badge>
-                      <h3 className="text-lg font-bold text-neutral-900">
-                        {a.customer?.name || 'Customer'}
-                      </h3>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant={(a.status === 'in-progress' || a.status === 'ongoing') ? 'warning' : a.status === 'completed' ? 'success' : 'primary'} className="capitalize">
-                        {(a.statusNormalized || a.status).replace('-', ' ')}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-neutral-600">
-                    <div className="flex items-center gap-2">
-                      <Calendar size={16} className="text-neutral-400" />
-                      <span>
-                        {a.scheduledDate
-                          ? new Date(a.scheduledDate).toLocaleString()
-                          : 'Schedule TBD'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin size={16} className="text-neutral-400" />
-                      <span className="truncate">{a.address?.street || 'Address hidden'}</span>
-                    </div>
-                  </div>
+          <section>
+            <h2 className="text-xl font-bold text-neutral-900 mb-4">Assigned Works</h2>
+            <div className="space-y-4">
+              {assigned.length > 0 ? assigned.map(a => renderJobCard(a, 'border-l-primary-500')) : (
+                <div className="text-center py-10 bg-white rounded-xl border border-dashed border-neutral-300 text-neutral-500">
+                  No assigned works
                 </div>
-                <div className="flex flex-row md:flex-col justify-end gap-2 md:w-48 border-t md:border-t-0 md:border-l border-neutral-100 pt-4 md:pt-0 md:pl-6">
-                  <Button
-                    variant="outline"
-                    className="w-full justify-center"
-                    disabled={!['accepted', 'assigned'].includes(a.status)}
-                    onClick={() => updateJobStatus(a._id, 'ongoing')}
-                  >
-                    <Clock size={16} className="mr-2" />
-                    Start
-                  </Button>
-                  <Button
-                    className="w-full justify-center bg-success-600 hover:bg-success-700"
-                    disabled={!['in-progress', 'ongoing'].includes(a.status)}
-                    onClick={() => updateJobStatus(a._id, 'completed')}
-                  >
-                    <CheckCircle size={16} className="mr-2" />
-                    Completed
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          )) : (
-            <div className="text-center py-16 bg-white rounded-xl border border-dashed border-neutral-300">
-              <div className="h-16 w-16 bg-primary-50 rounded-full flex items-center justify-center mx-auto mb-4 text-primary-400">
-                <Briefcase size={32} />
-              </div>
-              <h3 className="text-lg font-medium text-neutral-900">No assigned works</h3>
-              <p className="text-neutral-500">Works will appear here when a provider assigns you.</p>
+              )}
             </div>
-          )}
+          </section>
           
-          <h2 className="text-xl font-bold text-neutral-900">Ongoing Works</h2>
-          {ongoing.length > 0 ? ongoing.map(a => (
-            <Card key={a._id} className="border-l-4 border-l-warning-500">
-              <div className="flex flex-col md:flex-row gap-6">
-                <div className="flex-grow space-y-3">
+          <section>
+            <h2 className="text-xl font-bold text-neutral-900 mb-4">Ongoing Works</h2>
+            <div className="space-y-4">
+              {ongoing.length > 0 ? ongoing.map(a => renderJobCard(a, 'border-l-warning-500')) : (
+                <div className="text-center py-10 text-neutral-500">No ongoing works</div>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-bold text-neutral-900 mb-4">Completed Works</h2>
+            <div className="space-y-4">
+              {completed.length > 0 ? completed.map(a => (
+                <Card key={a._id} className="border-l-4 border-l-success-500 p-4">
                   <div className="flex items-start justify-between">
                     <div>
                       <Badge variant="neutral" className="mb-2">
                         {a.service?.name || 'Service'}
                       </Badge>
-                      <h3 className="text-lg font-bold text-neutral-900">
-                        {a.customer?.name || 'Customer'}
-                      </h3>
+                      <h3 className="text-lg font-bold text-neutral-900">{a.customer?.name || 'Customer'}</h3>
                     </div>
-                    <div className="text-right">
-                      <Badge variant="warning" className="capitalize">
-                        {(a.statusNormalized || a.status).replace('-', ' ')}
-                      </Badge>
-                    </div>
+                    <Badge variant="success">Completed</Badge>
                   </div>
-                </div>
-                <div className="flex flex-row md:flex-col justify-end gap-2 md:w-48 border-t md:border-t-0 md:border-l border-neutral-100 pt-4 md:pt-0 md:pl-6">
-                  <Button
-                    className="w-full justify-center bg-success-600 hover:bg-success-700"
-                    onClick={() => updateJobStatus(a._id, 'completed')}
-                  >
-                    <CheckCircle size={16} className="mr-2" />
-                    Complete
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          )) : (
-            <div className="text-center py-10 text-neutral-500">No ongoing works</div>
-          )}
+                </Card>
+              )) : (
+                <div className="text-center py-10 text-neutral-500">No completed works</div>
+              )}
+            </div>
+          </section>
 
-          <h2 className="text-xl font-bold text-neutral-900">Completed Works</h2>
-          {completed.length > 0 ? completed.map(a => (
-            <Card key={a._id} className="border-l-4 border-l-success-500">
-              <div className="flex items-start justify-between">
-                <div>
-                  <Badge variant="neutral" className="mb-2">
-                    {a.service?.name || 'Service'}
-                  </Badge>
-                  <h3 className="text-lg font-bold text-neutral-900">
-                    {a.customer?.name || 'Customer'}
-                  </h3>
-                </div>
-                <Badge variant="success" className="capitalize">Completed</Badge>
-              </div>
-            </Card>
-          )) : (
-            <div className="text-center py-10 text-neutral-500">No completed works</div>
-          )}
-
-          <h2 className="text-xl font-bold text-neutral-900">Rejected/Cancelled Works</h2>
-          {cancelled.length > 0 ? cancelled.map(a => (
-            <Card key={a._id} className="border-l-4 border-l-error-500">
-              <div className="flex items-start justify-between">
-                <div>
-                  <Badge variant="neutral" className="mb-2">
-                    {a.service?.name || 'Service'}
-                  </Badge>
-                  <h3 className="text-lg font-bold text-neutral-900">
-                    {a.customer?.name || 'Customer'}
-                  </h3>
-                </div>
-                <Badge variant="danger" className="capitalize">Cancelled</Badge>
-              </div>
-            </Card>
-          )) : (
-            <div className="text-center py-10 text-neutral-500">No rejected or cancelled works</div>
-          )}
+          <section>
+            <h2 className="text-xl font-bold text-neutral-900 mb-4">Cancelled Works</h2>
+            <div className="space-y-4">
+              {cancelled.length > 0 ? cancelled.map(a => (
+                <Card key={a._id} className="border-l-4 border-l-error-500 p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <Badge variant="neutral" className="mb-2">
+                        {a.service?.name || 'Service'}
+                      </Badge>
+                      <h3 className="text-lg font-bold text-neutral-900">{a.customer?.name || 'Customer'}</h3>
+                    </div>
+                    <Badge variant="danger">Cancelled</Badge>
+                  </div>
+                </Card>
+              )) : (
+                <div className="text-center py-10 text-neutral-500">No cancelled works</div>
+              )}
+            </div>
+          </section>
         </div>
       </div>
     </div>

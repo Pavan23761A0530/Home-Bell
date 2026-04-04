@@ -168,18 +168,18 @@ const Services = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredServices.length > 0 ? (
-                            filteredServices.map(service => (
-                                <Link key={service._id} to={`/book/${service._id}`} state={{ service }} className="group h-full">
+                            filteredServices.map((service, index) => (
+                                <Link key={service._id || index} to={service._id ? `/book/${service._id}` : '#'} state={{ service }} className="group h-full">
                                     <Card className="h-full flex flex-col p-0 overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border-transparent hover:border-primary-100">
                                         <div className="h-48 bg-neutral-100 relative overflow-hidden flex items-center justify-center">
                                             <img
                                                 src={getServiceImage(service)}
-                                                alt={service.name}
+                                                alt={service.name || 'Service'}
                                                 className="w-full h-full object-cover"
                                             />
                                             <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-xs font-bold text-neutral-900 flex items-center shadow-sm">
                                                 <Star className="w-3 h-3 text-yellow-500 mr-1 fill-current" />
-                                                {service.rating} ({service.reviews})
+                                                {service.rating || 'N/A'} ({service.reviews || 0})
                                             </div>
                                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
                                         </div>
@@ -187,20 +187,20 @@ const Services = () => {
                                         <div className="p-6 flex-grow flex flex-col">
                                             <div className="flex justify-between items-start mb-2">
                                                 <Badge variant="neutral" className="mb-2">
-                                                    {typeof service.category === 'string' ? service.category : service.category?.name}
+                                                    {typeof service.category === 'string' ? service.category : (service.category?.name || 'Category')}
                                                 </Badge>
                                             </div>
 
                                             <h3 className="text-xl font-bold text-neutral-900 mb-2 group-hover:text-primary-600 transition-colors">
-                                                {service.name}
+                                                {service.name || 'Untitled Service'}
                                             </h3>
 
                                             <p className="text-neutral-500 text-sm mb-6 line-clamp-2 flex-grow">
-                                                {service.description}
+                                                {service.description || 'No description available.'}
                                             </p>
 
                                             <div className="pt-4 border-t border-neutral-100 flex items-center justify-between mt-auto">
-                                                <div><p className="text-xl font-bold text-neutral-900">₹{Number(service.price).toFixed(2)}</p></div>
+                                                <div><p className="text-xl font-bold text-neutral-900">₹{Number(service.price || 0).toFixed(2)}</p></div>
                                                 <Button size="sm" className="gap-1 rounded-full px-4 group-hover:bg-primary-700">
                                                     Book Now <ArrowRight size={14} />
                                                 </Button>

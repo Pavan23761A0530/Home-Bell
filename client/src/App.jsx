@@ -37,6 +37,7 @@ import ProviderSettings from './pages/ProviderSettings';
 import ProviderProfile from './pages/ProviderProfile';
 import ProviderEarnings from './pages/ProviderEarnings';
 import Payment from './pages/Payment';
+import PaymentSuccess from './pages/PaymentSuccess';
 import ProviderSearching from './pages/ProviderSearching';
 import ContractReview from './pages/ContractReview';
 import HowItWorks from './pages/HowItWorks';
@@ -81,6 +82,7 @@ function App() {
               <Route path="/bookings/:bookingId/searching" element={<ProviderSearching />} />
               <Route path="/bookings/:bookingId/contract" element={<ContractReview />} />
               <Route path="/payment/:bookingId" element={<Payment />} />
+              <Route path="/payment-success" element={<PaymentSuccess />} />
               <Route path="/bookings/:bookingId/rate" element={<RateProvider />} />
               <Route path="/rate-provider" element={<RateProvider />} />
             </Route>
