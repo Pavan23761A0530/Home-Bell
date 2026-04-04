@@ -98,7 +98,8 @@ app.use('/api/admin/auth', require('./routes/adminAuth'));
 app.use('/api/admin', admin);
 
 // Serve static assets
-app.use(express.static(path.resolve(__dirname, "../client/dist")));
+const buildPath = path.resolve(__dirname, "../client/dist");
+app.use(express.static(buildPath));
 
 // Add catch-all route for SPA
 app.get("*", (req, res) => {
@@ -106,7 +107,14 @@ app.get("*", (req, res) => {
     if (req.path.startsWith('/api')) {
         return res.status(404).json({ success: false, message: 'API route not found' });
     }
-    res.sendFile(path.resolve(__dirname, "../client/dist/index.html"));
+    
+    const indexPath = path.resolve(buildPath, "index.html");
+    res.sendFile(indexPath, (err) => {
+        if (err) {
+            console.error(`[Static File Error] Failed to send index.html: ${err.message}`);
+            res.status(500).send("Frontend build not found. Please ensure 'npm run build' was successful.");
+        }
+    });
 });
 
 const PORT = process.env.PORT || 5000;
