@@ -266,37 +266,17 @@ const BookingDetails = () => {
                                             <h4 className={`font-medium ${isCompleted ? 'text-gray-900' : 'text-gray-500'}`}>
                                                 {step.icon} {step.label}
                                             </h4>
-                                            <span className="text-xs text-gray-500">
-                                                {step.status === 'paid' && booking.paymentDetails?.verifiedAt
-                                                    ? new Date(booking.paymentDetails.verifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                                    : booking.statusHistory?.find(h => h.status === step.status)?.timestamp
-                                                        ? new Date(booking.statusHistory.find(h => h.status === step.status).timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                                        : 'Pending'}
+                                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                                {isCompleted ? 'Completed' : 'Pending'}
                                             </span>
                                         </div>
                                         {isCurrent && (
-                                            <p className="text-sm text-blue-600 mt-1 font-medium">Current Status</p>
+                                            <p className="text-xs text-blue-600 mt-1 font-bold uppercase tracking-wide">Current Status</p>
                                         )}
                                     </div>
                                 </div>
                             );
                         })}
-                    </div>
-                </div>
-
-                {/* Status Indicator */}
-                <div className="mt-6 pt-4 border-t border-gray-100">
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-700">Overall Progress</span>
-                        <span className="text-sm font-bold text-blue-600">
-                            {Math.round(((currentStepIndex + 1) / steps.length) * 100)}%
-                        </span>
-                    </div>
-                    <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                        <div
-                            className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500"
-                            style={{ width: `${(currentStepIndex + 1) / steps.length * 100}%` }}
-                        ></div>
                     </div>
                 </div>
             </div>
