@@ -8,11 +8,29 @@ const ProviderService = require('../models/ProviderService');
 const ProviderProfile = require('../models/ProviderProfile');
 const { sendBookingNotification } = require('../controllers/notifications');
 
-// Initialize Razorpay
-const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Initialize Razorpay lazily to avoid crash if keys are missing during boot
+let razorpay;
+try {
+    if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+        razorpay = new Razorpay({
+            key_id: process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_KEY_SECRET
+        });
+        console.log('[Razorpay] Instance initialized successfully');
+    } else {
+        console.warn('[Razorpay] Missing RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET. Payment features will be disabled.');
+    }
+} catch (err) {
+    console.error('[Razorpay] Initialization failed:', err.message);
+}
+
+// Helper to get razorpay instance or throw error
+const getRazorpay = () => {
+    if (!razorpay) {
+        throw new Error('Razorpay is not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.');
+    }
+    return razorpay;
+};
 
 // @desc    Create Razorpay order
 // @route   POST /api/payment/create-order
@@ -84,7 +102,7 @@ router.post('/create-order', protect, async (req, res) => {
 
         let order;
         try {
-            order = await razorpay.orders.create(options);
+            order = await getRazorpay().orders.create(options);
         } catch (razorpayErr) {
             console.error(`[Razorpay /create-order] SDK Error creating order:`, razorpayErr);
             return res.status(500).json({ success: false, error: 'Razorpay SDK failed to create order', details: razorpayErr });
