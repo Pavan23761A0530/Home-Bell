@@ -4,7 +4,7 @@
   "description": "Home Bell Service Marketplace",
   "private": true,
   "scripts": {
-    "build": "cd client && npm install && npm run build && cd ../server && npm install",
+    "build": "cd client && npm install && npm run build",
     "start": "node server.js"
   },
   "dependencies": {
