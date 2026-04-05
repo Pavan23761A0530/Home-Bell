@@ -49,4 +49,17 @@ router.route('/addresses')
 router.route('/addresses/:addressId')
     .delete(deleteAddress);
 
+router.route('/welcome-seen')
+    .put(async (req, res) => {
+        try {
+            const user = await User.findById(req.user.id);
+            if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+            user.hasSeenWelcome = true;
+            await user.save();
+            res.status(200).json({ success: true, message: 'Welcome seen updated' });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
 module.exports = router;

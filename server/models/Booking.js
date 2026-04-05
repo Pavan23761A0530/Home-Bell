@@ -84,6 +84,11 @@ const bookingSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    paymentMethod: {
+        type: String,
+        enum: ['cod', 'online'],
+        default: 'cod'
+    },
     createdAt: {
         type: Date,
         default: Date.now

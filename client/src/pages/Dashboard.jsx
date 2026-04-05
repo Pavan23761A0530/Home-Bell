@@ -2,23 +2,64 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Clock, CheckCircle, Wallet, Calendar, MapPin, ArrowRight, Star, Home, User, CreditCard, Settings, Bookmark, Phone, Shield } from 'lucide-react';
+import { Clock, CheckCircle, Wallet, Calendar, MapPin, ArrowRight, Star, Home, User, CreditCard, Settings, Bookmark, Phone, Shield, Gift, X } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import Badge from '../components/common/Badge';
 import Loader from '../components/common/Loader';
+import Modal from '../components/common/Modal';
 import toast from 'react-hot-toast';
+import confetti from 'canvas-confetti';
 
 const Dashboard = () => {
-    const { user } = useAuth();
+    const { user, checkUserLoggedIn } = useAuth();
     const location = useLocation();
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [showWelcome, setShowWelcome] = useState(false);
 
     useEffect(() => {
         fetchBookings();
-    }, []);
+        
+        // Trigger welcome celebration for new users
+        if (user && !user.hasSeenWelcome && user.couponPoints >= 100) {
+            handleWelcomeCelebration();
+        }
+    }, [user]);
+
+    const handleWelcomeCelebration = () => {
+        setShowWelcome(true);
+        
+        // Confetti burst
+        const duration = 3 * 1000;
+        const animationEnd = Date.now() + duration;
+        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
+
+        const randomInRange = (min, max) => Math.random() * (max - min) + min;
+
+        const interval = setInterval(() => {
+            const timeLeft = animationEnd - Date.now();
+
+            if (timeLeft <= 0) {
+                return clearInterval(interval);
+            }
+
+            const particleCount = 50 * (timeLeft / duration);
+            confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+            confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+        }, 250);
+    };
+
+    const closeWelcome = async () => {
+        setShowWelcome(false);
+        try {
+            await api.put('/users/welcome-seen');
+            if (checkUserLoggedIn) await checkUserLoggedIn();
+        } catch (err) {
+            console.error("Failed to update welcome status", err);
+        }
+    };
 
     const fetchBookings = async () => {
         try {
@@ -141,7 +182,47 @@ const Dashboard = () => {
                                 <Wallet size={24} />
                             </div>
                         </Card>
+
+                        {/* Coupon Points Stats Card */}
+                        <Card className="pl-6 pr-6 py-8 border-l-4 border-l-amber-500 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-medium text-neutral-500 uppercase tracking-wide">Coupon Points</p>
+                                <p className="text-3xl font-bold text-neutral-900 mt-1">{user?.couponPoints || 0}</p>
+                            </div>
+                            <div className="h-12 w-12 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+                                <Gift size={24} />
+                            </div>
+                        </Card>
                     </div>
+
+                    {/* Welcome Modal */}
+                    <Modal 
+                        isOpen={showWelcome} 
+                        onClose={closeWelcome}
+                        title=""
+                    >
+                        <div className="p-4 text-center">
+                            <div className="mb-6 flex justify-center">
+                                <div className="h-24 w-24 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 animate-bounce">
+                                    <Gift size={48} />
+                                </div>
+                            </div>
+                            <h2 className="text-3xl font-bold text-neutral-900 mb-2">🎉 Welcome to Home Bell!</h2>
+                            <p className="text-neutral-600 mb-8 text-lg">
+                                We've gifted you <span className="font-bold text-primary-600">100 Coupon Points</span> to get started on your first service!
+                            </p>
+                            <div className="bg-neutral-50 p-6 rounded-2xl border border-neutral-100 mb-8">
+                                <p className="text-sm text-neutral-500 uppercase tracking-wider font-semibold mb-1">Your Balance</p>
+                                <p className="text-4xl font-black text-neutral-900">{user?.couponPoints || 100}</p>
+                            </div>
+                            <Button 
+                                onClick={closeWelcome} 
+                                className="w-full py-4 text-lg font-bold rounded-2xl"
+                            >
+                                Let's Explore!
+                            </Button>
+                        </div>
+                    </Modal>
 
                     <div>
                         <div className="flex items-center justify-between mb-6">

@@ -52,7 +52,9 @@ exports.register = async (req, res) => {
             name,
             email,
             password,
-            role: userRole
+            role: userRole,
+            couponPoints: 100,
+            hasSeenWelcome: false
         });
 
         // Create Provider Profile if role is provider
@@ -301,7 +303,8 @@ const sendTokenResponse = (user, statusCode, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                couponPoints: user.couponPoints
+                couponPoints: user.couponPoints,
+                hasSeenWelcome: user.hasSeenWelcome
             }
         });
 };

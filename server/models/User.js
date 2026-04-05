@@ -26,7 +26,11 @@ const userSchema = new mongoose.Schema({
     },
     couponPoints: {
         type: Number,
-        default: 0
+        default: 100
+    },
+    hasSeenWelcome: {
+        type: Boolean,
+        default: false
     },
     // New Fields
     walletBalance: {
