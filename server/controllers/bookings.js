@@ -169,6 +169,7 @@ exports.createBooking = async (req, res) => {
             originalPrice: providerPrice,
             discountAmount,
             usedPoints,
+            paymentMethod,
             paymentStatus: 'pending'
         };
 
@@ -318,7 +319,7 @@ exports.getBooking = async (req, res) => {
 // @access  Private (Provider/Admin)
 exports.updateBookingStatus = async (req, res) => {
     try {
-        const { status } = req.body;
+        const { status, paymentStatus } = req.body;
         let booking = await Booking.findById(req.params.id)
             .populate('customer', 'name')
             .populate({
@@ -329,6 +330,11 @@ exports.updateBookingStatus = async (req, res) => {
 
         if (!booking) {
             return res.status(404).json({ success: false, error: 'Booking not found' });
+        }
+
+        // Allow updating paymentStatus separately or along with status
+        if (paymentStatus) {
+            booking.paymentStatus = paymentStatus;
         }
 
         // Handle unassigned or searching/assigned booking being accepted by a provider
@@ -418,7 +424,14 @@ exports.updateBookingStatus = async (req, res) => {
         } else if (status === 'in-progress' && booking.status === 'assigned') {
             // allow direct start from assigned
             booking.status = 'in-progress';
+        } else if (status === 'in-progress' && booking.status === 'in-progress') {
+            // allow staying in-progress (e.g., when collecting money)
+            booking.status = 'in-progress';
         } else if (status === 'completed' && booking.status === 'in-progress') {
+            // Prevent completion for COD if not paid
+            if (booking.paymentMethod === 'cod' && booking.paymentStatus !== 'paid') {
+                return res.status(400).json({ success: false, error: 'Please collect payment before completing job' });
+            }
             booking.status = 'completed';
 
             // If it was an Online payment, ensure paymentStatus is marked as paid
