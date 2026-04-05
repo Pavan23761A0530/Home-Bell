@@ -56,11 +56,9 @@ const WorkerDashboard = () => {
 
     const toastId = toast.loading(`Updating job status to ${displayNext}...`);
     try {
-      // For "Collect Money", we update the UI locally to show payment is done.
-      // In a real app, we might call an API to update paymentStatus to 'paid'.
+      // For "Collect Money", we only update paymentStatus, not status
       if (isCollectingMoney) {
         const res = await api.put(`/bookings/${bookingId}/status`, { 
-          status: 'in-progress', // Keep in-progress but update payment status
           paymentStatus: 'paid' 
         });
         if (res.data.success) {
@@ -175,7 +173,7 @@ const WorkerDashboard = () => {
               Start Job
             </Button>
           )}
-          {['in-progress', 'ongoing', 'accepted'].includes(a.status) && (
+          {['in-progress', 'ongoing'].includes(a.status) && (
             <div className="flex flex-col gap-2 w-full">
               {/* COD Flow: Collect Money logic */}
               {a.paymentMethod === 'cod' && a.paymentStatus !== 'paid' ? (

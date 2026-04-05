@@ -335,6 +335,11 @@ exports.updateBookingStatus = async (req, res) => {
         // Allow updating paymentStatus separately or along with status
         if (paymentStatus) {
             booking.paymentStatus = paymentStatus;
+            // If we're only updating paymentStatus, we can save and return early
+            if (!status) {
+                await booking.save();
+                return res.status(200).json({ success: true, data: booking });
+            }
         }
 
         // Handle unassigned or searching/assigned booking being accepted by a provider

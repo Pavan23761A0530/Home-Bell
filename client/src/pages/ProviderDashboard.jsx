@@ -96,13 +96,27 @@ const ProviderDashboard = () => {
 
     const handleJobAction = async (jobId, status) => {
         try {
+            // For "Collect Money", we only update paymentStatus, not status
+            if (status === 'collect-money') {
+                const res = await api.put(`/bookings/${jobId}/status`, { 
+                    paymentStatus: 'paid' 
+                });
+                if (res.data.success) {
+                    toast.success('Payment collected successfully!');
+                    fetchDashboardData();
+                } else {
+                    toast.error(res.data.error || 'Failed to update payment status');
+                }
+                return;
+            }
+
             const res = await api.put(`/bookings/${jobId}/status`, { status });
             // Optimistically update UI
             if (res.data.success) {
                 const updatedJob = res.data.data;
                 setActiveJobs(prev => prev.map(job => 
                     job._id === jobId 
-                    ? { ...job, status: updatedJob.status, statusDisplay: updatedJob.statusNormalized || updatedJob.status } 
+                    ? { ...job, status: updatedJob.status, statusDisplay: updatedJob.statusNormalized || updatedJob.status, paymentStatus: updatedJob.paymentStatus } 
                     : job
                 ));
             }
@@ -415,13 +429,31 @@ const ProviderDashboard = () => {
 
                                     <div className="flex flex-row md:flex-col justify-end gap-2 md:w-48 border-t md:border-t-0 md:border-l border-neutral-100 pt-4 md:pt-0 md:pl-6">
                                         {(['ongoing', 'in-progress'].includes(job.statusDisplay)) && (
-                                            <Button
-                                                onClick={() => handleJobAction(job._id, 'completed')}
-                                                className="w-full justify-center bg-success-600 hover:bg-success-700 focus:ring-success-500"
-                                            >
-                                                <CheckCircle size={16} className="mr-2" />
-                                                Complete Job
-                                            </Button>
+                                            <div className="flex flex-col gap-2 w-full">
+                                                {/* COD Flow: Collect Money logic */}
+                                                {job.paymentMethod === 'cod' && job.paymentStatus !== 'paid' ? (
+                                                    <>
+                                                        <p className="text-[10px] text-amber-600 font-bold uppercase text-center bg-amber-50 py-1 rounded border border-amber-200">
+                                                            Collect Money First
+                                                        </p>
+                                                        <Button
+                                                            className="w-full justify-center bg-amber-500 hover:bg-amber-600 text-white"
+                                                            onClick={() => handleJobAction(job._id, 'collect-money')}
+                                                        >
+                                                            <DollarSign size={16} className="mr-2" />
+                                                            Collect ₹{Number(job.price).toFixed(2)}
+                                                        </Button>
+                                                    </>
+                                                ) : (
+                                                    <Button
+                                                        onClick={() => handleJobAction(job._id, 'completed')}
+                                                        className="w-full justify-center bg-success-600 hover:bg-success-700 focus:ring-success-500"
+                                                    >
+                                                        <CheckCircle size={16} className="mr-2" />
+                                                        Complete Job
+                                                    </Button>
+                                                )}
+                                            </div>
                                         )}
                                         {/* Show Accept Job only if not yet accepted and no worker is assigned */}
                                         {(job.status === 'searching-provider' || (job.status === 'assigned' && !job.worker)) && (
