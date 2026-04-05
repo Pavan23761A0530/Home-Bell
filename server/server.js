@@ -99,7 +99,12 @@ app.use('/api/admin', admin);
 
 // Static serving for frontend build
 const buildPath = path.join(__dirname, "../client/dist");
-app.use(express.static(buildPath));
+const rootBuildPath = path.join(process.cwd(), "client/dist");
+
+// Check which path exists and use it
+const finalBuildPath = fs.existsSync(buildPath) ? buildPath : rootBuildPath;
+console.log(`[Static] Serving frontend from: ${finalBuildPath}`);
+app.use(express.static(finalBuildPath));
 
 // Catch-all route to serve index.html for SPA (React Router)
 app.get("*", (req, res) => {
@@ -107,7 +112,14 @@ app.get("*", (req, res) => {
     if (req.path.startsWith('/api')) {
         return res.status(404).json({ success: false, message: 'API route not found' });
     }
-    res.sendFile(path.resolve(buildPath, "index.html"));
+    
+    const indexPath = path.resolve(finalBuildPath, "index.html");
+    res.sendFile(indexPath, (err) => {
+        if (err) {
+            console.error(`[Static Error] Failed to send index.html from ${indexPath}: ${err.message}`);
+            res.status(404).send("Frontend build not found. If using separate services on Render, please configure Redirects/Rewrites in the dashboard.");
+        }
+    });
 });
 
 const PORT = process.env.PORT || 5000;
