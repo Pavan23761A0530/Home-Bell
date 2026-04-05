@@ -144,6 +144,9 @@ io.use(async (socket, next) => {
     
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (!decoded || !decoded.id) {
+            return next(new Error("Invalid token payload"));
+        }
         const user = await User.findById(decoded.id);
         
         if (!user) {
