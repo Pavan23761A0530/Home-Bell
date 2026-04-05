@@ -359,6 +359,23 @@ const ProviderDashboard = () => {
                                                 <h3 className="text-lg font-bold text-neutral-900">
                                                     {job.customer?.name || 'Customer'}
                                                 </h3>
+                                                <div className="flex flex-wrap gap-2 mt-1">
+                                                    {job.paymentMethod === 'online' && job.paymentStatus === 'paid' && (
+                                                        <Badge variant="success" className="bg-success-100 text-success-700 border-success-200">
+                                                            PAID
+                                                        </Badge>
+                                                    )}
+                                                    {job.paymentMethod === 'cod' && (
+                                                        <Badge variant="warning" className="bg-amber-100 text-amber-700 border-amber-200">
+                                                            CASH ON DELIVERY
+                                                        </Badge>
+                                                    )}
+                                                    {job.paymentMethod === 'online' && job.paymentStatus !== 'paid' && (
+                                                        <Badge variant="neutral" className="bg-neutral-100 text-neutral-600">
+                                                            PAYMENT PENDING
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </div>
                                         <div className="text-right">
                                                 <p className="text-xl font-bold text-primary-600">

@@ -42,11 +42,39 @@ const WorkerDashboard = () => {
   };
 
   const updateJobStatus = async (bookingId, next) => {
-    const toastId = toast.loading(`Updating job status to ${next === 'ongoing' ? 'Ongoing' : 'Completed'}...`);
+    const isCOD = assignments.find(a => a._id === bookingId)?.paymentMethod === 'cod';
+    const isCollectingMoney = next === 'collect-money';
+    
+    let displayNext = next;
+    if (isCollectingMoney) {
+      displayNext = 'Money Collected';
+    } else if (next === 'ongoing') {
+      displayNext = 'Ongoing';
+    } else if (next === 'completed') {
+      displayNext = 'Completed';
+    }
+
+    const toastId = toast.loading(`Updating job status to ${displayNext}...`);
     try {
+      // For "Collect Money", we update the UI locally to show payment is done.
+      // In a real app, we might call an API to update paymentStatus to 'paid'.
+      if (isCollectingMoney) {
+        const res = await api.put(`/bookings/${bookingId}/status`, { 
+          status: 'in-progress', // Keep in-progress but update payment status
+          paymentStatus: 'paid' 
+        });
+        if (res.data.success) {
+          toast.success('Payment collected successfully!', { id: toastId });
+          fetchAssignments();
+        } else {
+          toast.error(res.data.error || 'Failed to update payment status', { id: toastId });
+        }
+        return;
+      }
+
       const res = await api.put(`/bookings/${bookingId}/status`, { status: next === 'ongoing' ? 'in-progress' : next });
       if (res.data.success) {
-        toast.success(`Job marked as ${next === 'ongoing' ? 'Ongoing' : 'Completed'}`, { id: toastId });
+        toast.success(`Job marked as ${displayNext}`, { id: toastId });
         fetchAssignments();
       } else {
         toast.error(res.data.error || 'Failed to update status', { id: toastId });
@@ -78,6 +106,23 @@ const WorkerDashboard = () => {
                   <User size={18} className="text-primary-500" />
                   {a.customer?.name || 'Customer'}
                 </h3>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {a.paymentMethod === 'online' && a.paymentStatus === 'paid' && (
+                    <Badge variant="success" className="bg-success-100 text-success-700 border-success-200">
+                      PAID
+                    </Badge>
+                  )}
+                  {a.paymentMethod === 'cod' && (
+                    <Badge variant="warning" className="bg-amber-100 text-amber-700 border-amber-200">
+                      CASH ON DELIVERY
+                    </Badge>
+                  )}
+                  {a.paymentMethod === 'online' && a.paymentStatus !== 'paid' && (
+                    <Badge variant="neutral" className="bg-neutral-100 text-neutral-600">
+                      PAYMENT PENDING
+                    </Badge>
+                  )}
+                </div>
                 {a.customer?.phone && (
                   <p className="text-sm text-neutral-600 flex items-center gap-2">
                     <Phone size={14} className="text-neutral-400" />
@@ -131,13 +176,31 @@ const WorkerDashboard = () => {
             </Button>
           )}
           {['in-progress', 'ongoing', 'accepted'].includes(a.status) && (
-            <Button
-              className="w-full justify-center bg-success-600 hover:bg-success-700"
-              onClick={() => updateJobStatus(a._id, 'completed')}
-            >
-              <CheckCircle size={16} className="mr-2" />
-              Complete
-            </Button>
+            <div className="flex flex-col gap-2 w-full">
+              {/* COD Flow: Collect Money logic */}
+              {a.paymentMethod === 'cod' && a.paymentStatus !== 'paid' ? (
+                <>
+                  <p className="text-[10px] text-amber-600 font-bold uppercase text-center bg-amber-50 py-1 rounded border border-amber-200">
+                    Collect Money First
+                  </p>
+                  <Button
+                    className="w-full justify-center bg-amber-500 hover:bg-amber-600 text-white"
+                    onClick={() => updateJobStatus(a._id, 'collect-money')}
+                  >
+                    <DollarSign size={16} className="mr-2" />
+                    Collect ₹{Number(a.price).toFixed(2)}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  className="w-full justify-center bg-success-600 hover:bg-success-700"
+                  onClick={() => updateJobStatus(a._id, 'completed')}
+                >
+                  <CheckCircle size={16} className="mr-2" />
+                  Complete Job
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </div>
