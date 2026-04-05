@@ -105,7 +105,12 @@ router.post('/create-order', protect, async (req, res) => {
             order = await getRazorpay().orders.create(options);
         } catch (razorpayErr) {
             console.error(`[Razorpay /create-order] SDK Error creating order:`, razorpayErr);
-            return res.status(500).json({ success: false, error: 'Razorpay SDK failed to create order', details: razorpayErr });
+            const errorMessage = razorpayErr.error?.description || razorpayErr.message || 'Unknown Razorpay Error';
+            return res.status(500).json({ 
+                success: false, 
+                error: `Razorpay SDK failed: ${errorMessage}`, 
+                details: razorpayErr 
+            });
         }
         
         console.log(`[Razorpay /create-order] Successfully generated Razorpay order ID: ${order.id}`);
